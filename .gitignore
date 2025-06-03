@@ -1,0 +1,24 @@
+# Python
+*.egg-info
+*.pyc
+.coverage
+.flake8
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+/build/
+/uv.lock
+__pycache__
+htmlcov/
+
+# Virtual environments
+*/.venv
+/.venv
+/venv
+
+# Editors
+/.vscode
+/.idea
+
+# Other
+/_*

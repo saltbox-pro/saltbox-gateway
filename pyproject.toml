@@ -1,0 +1,122 @@
+[project]
+dynamic = ["dependencies", "version"]
+name = "saltbox-gateway"
+requires-python = ">=3.12"
+license = "Apache-2.0"
+description = ""
+readme = "README.md"
+classifiers = [
+  "Topic :: System :: Systems Administration",
+]
+
+[project.urls]
+Homepage = "https://saltbox.pro"
+Documentation = "https://saltbox.pro"
+Repository = "https://gitlab.com/saltbox/saltbox-gateway"
+
+[project.optional-dependencies]
+dev = [
+  "mypy>=1.15.0",
+  "pre-commit",
+  "types-redis",
+  "ruff",
+]
+
+[build-system]
+requires = ["setuptools>=75.1.0", "setuptools-scm"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+# Explicit package dir for flat-layout
+include = ["saltbox_gateway", "saltbox_gateway.*"]
+
+[tool.setuptools.dynamic]
+dependencies = { file = ["requirements.txt"] }
+version = { attr = "saltbox_gateway.__version__" }
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+src = ["saltbox_gateway", "tests"]
+extend-exclude = ["docs", "env", "__pycache__", "*.egg", "htmlcov"]
+respect-gitignore = true
+unsafe-fixes = false
+
+[tool.ruff.format]
+quote-style = "single"
+docstring-code-format = true
+
+[tool.ruff.lint]
+select = [
+  "B",     # flake8-bugbear
+  "C90",   # mccabe
+  "C4",    # flake8-comprehensions
+  "DTZ",   # flake8-datetimez https://docs.astral.sh/ruff/rules/#flake8-datetimez-dtz
+  "EM",    # flake8-errmsg
+  "UP",    # pyupgrade
+  "FA",    # flake8-future-annotations
+  "LOG",   # flake8-logging
+  "PTH",   # flake8-use-pathlib
+  "ASYNC", #flake8-async
+  "G",     # flake8-logging-format
+  "E",     # pycodestyle errors
+  "F",     # pyflakes
+  "I",     # isort
+  "S",     # flake8-bandit
+  "W",     # pycodestyle warnings
+  "N",     # pep8-naming
+  "RUF",   # ruff checks
+  "TD",    # flake8-todo
+]
+ignore = [
+  # "E402",   # module level import not at top of file
+  "E722", # do not use bare except
+  "ERA",  # do not autoremove commented out code
+  "N818", # error-suffix-on-exception-name
+  "UP040", # type instead of TypeAlias PEP 695"
+  "TD003", # Found TODO in code
+  "TD002", # Author name in TODO
+  # "G004", # Logging statement uses string formatting
+]
+fixable = ["ALL"]
+unfixable = ["F401", "F841", "UP035"]
+
+[tool.ruff.lint.flake8-quotes]
+docstring-quotes = "single"
+inline-quotes = "single"
+multiline-quotes = "single"
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.*" = ["S101", "DTZ", "EM101", "RUF012", "E712"]
+
+[tool.ruff.lint.isort]
+known-first-party = [
+    "saltbox_gateway",
+    "tests",
+]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.mypy]
+check_untyped_defs = true
+plugins = ["pydantic.mypy"]
+python_version = "3.12"
+ignore_missing_imports = false
+color_output = true
+warn_redundant_casts = true
+warn_unused_configs = true
+exclude = ["venv/", ".venv/", "tests/*"]
+strict = true
+disallow_any_generics = false
+disallow_incomplete_defs = true
+disallow_untyped_decorators = true
+disallow_untyped_defs = true
+implicit_reexport = false
+show_error_codes = true
+warn_return_any = true
+warn_unreachable = true
+warn_unused_ignores = true
