@@ -26,6 +26,11 @@ class Settings(BaseSettings):
     keycloak_client_secret: str = ''
     opa_url: str = ''
     rabbitmq_url: str = 'amqp://guest:guest@rabbitmq:5672'
+    official_modules: list[str] = ['saltbox-core', 'saltbox-processing']
+    service_registration_ttl: int = 3600
+    proxy_request_timeout: int = 10
+    health_check_interval: int = 15
+    health_check_timeout: int = 3
 
     model_config = SettingsConfigDict(env_file='.env')
 
