@@ -1,3 +1,4 @@
+import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -5,8 +6,10 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from saltbox_gateway import __version__
+from saltbox_gateway.api.discovery_router import router as discovery_router
 from saltbox_gateway.config import APP_DESC, APP_NAME, SETTINGS, logger
 from saltbox_gateway.middlwares.authn import AuthMiddleware
+from saltbox_gateway.services.health_checker import get_health_checker_service
 from saltbox_gateway.utils.redis_cache import CustomRedisCache
 from saltbox_gateway.utils.redis_config import RedisDependency, close_redis_pool, get_redis_connection
 
@@ -14,8 +17,22 @@ from saltbox_gateway.utils.redis_config import RedisDependency, close_redis_pool
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator:
     logger.debug('Starting Salt.Box Gateway lifespan context manager')
+    health_checker = get_health_checker_service()
+    health_task = None
+    if health_checker:
+        logger.debug('Starting health checker service')
+        health_task = asyncio.create_task(health_checker.start())
+    else:
+        logger.warning('Health checker service is not available')
     yield
     logger.debug('Ending Salt.Box Gateway lifespan context manager')
+    if health_task:
+        await health_checker.stop()
+        health_task.cancel()
+        try:
+            await health_task
+        except asyncio.CancelledError:
+            pass
     # Clean up redis cache
     await CustomRedisCache.clear_cache(get_redis_connection())
     # Close the Redis connection pool
@@ -41,7 +58,9 @@ app.add_middleware(
 app.add_middleware(
     AuthMiddleware,
     # Need add SETTINGS.base_url_root_path.rstrip('/') + uri in some cases
-    excluded_paths=[uri for uri in [app.docs_url, app.openapi_url, app.swagger_ui_oauth2_redirect_url] if uri],
+    excluded_paths=[uri for uri in [app.docs_url, app.openapi_url, app.swagger_ui_oauth2_redirect_url] if uri]
+    + ['/health']
+    + [r'/discovery(?:/.*)?$'],
 )
 
 
@@ -54,3 +73,6 @@ async def health_check(redis: RedisDependency) -> dict:
         return {'status': 'healthy', 'service': 'api-gateway', 'redis': pong}
     except Exception as e:
         raise HTTPException(status_code=503, detail=f'Unhealthy: {e!s}') from None
+
+
+app.include_router(discovery_router)
