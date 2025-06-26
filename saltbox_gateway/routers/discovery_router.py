@@ -4,7 +4,7 @@ from fastapi import APIRouter, Body, Depends
 
 from saltbox_gateway.config import logger
 from saltbox_gateway.errors import DiscoveryServiceError
-from saltbox_gateway.schemas import ProxyBalancingStrategy, ServiceInstance, ServiceSchema
+from saltbox_gateway.schemas import DiscoveryResponse, ProxyBalancingStrategy, ServiceInstance, ServiceSchema
 from saltbox_gateway.services.discovery import DiscoveryService, get_discovery_service
 
 router = APIRouter(prefix='/discovery', tags=['Discovery'])
@@ -14,49 +14,43 @@ router = APIRouter(prefix='/discovery', tags=['Discovery'])
 async def register_service(
     service_info: ServiceSchema,
     discovery_service: Annotated[DiscoveryService, Depends(get_discovery_service)],
-) -> dict:
+) -> DiscoveryResponse:
     """Register a new service in the discovery system."""
 
     try:
         service = await discovery_service.process(service_info)
-        msg = f'Service {service.service_name} registered successfully'
+        return DiscoveryResponse(
+            success=True,
+            message=f'Service {service.service_name} registered successfully',
+        )
     except DiscoveryServiceError as e:
         logger.exception(f'Discovery service error: {e}')
-        service = None
-        msg = str(e)
-
-    return {
-        'status': 'success' if service else 'error',
-        'message': msg,
-        'service': service if service else None,
-    }
+        return DiscoveryResponse(
+            success=False,
+            message=str(e),
+        )
 
 
+# TODO: refactor this endpoint
 @router.post('/unregister/{service_name}')
 async def remove_service_or_instance(
     service_name: str,
     discovery_service: Annotated[DiscoveryService, Depends(get_discovery_service)],
     instance: Annotated[ServiceInstance | None, Body(embed=True)] = None,
-) -> dict:
-    """Unregister a specific service instance."""
+) -> DiscoveryResponse:
+    """Unregister a specific service instance or the entire service."""
     if instance:
-        logger.debug(f'Unregistering service instance {service_name} at {instance.host}:{instance.port}')
-
         await discovery_service.remove_service_instance(service_name, instance.host, instance.port)
-        success = True
-        msg = f'Service instance {instance.host}:{instance.port} unregistered successfully'
-
+        return DiscoveryResponse(
+            success=True,
+            message=f'{instance.host}:{instance.port} of service {service_name} unregistered successfully',
+        )
     else:
-        logger.debug(f'Unregistering all instances of service {service_name}')
-
         await discovery_service.remove_service(service_name)
-        success = True
-        msg = f'Service {service_name} unregistered successfully'
-
-    return {
-        'status': 'success' if success else 'error',
-        'message': msg,
-    }
+        return DiscoveryResponse(
+            success=True,
+            message=f'Service {service_name} unregistered successfully',
+        )
 
 
 @router.get('/services')

@@ -64,3 +64,8 @@ class ServiceSchema(BaseModel):
     auto_discover_routes: bool = True
     enabled: bool = True
     balancing_strategy: ProxyBalancingStrategy = ProxyBalancingStrategy.RANDOM
+
+
+class DiscoveryResponse(BaseModel):
+    success: bool
+    message: str
