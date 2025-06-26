@@ -19,7 +19,6 @@ from saltbox_gateway.utils.redis_config import RedisDependency, close_redis_pool
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator:
-    logger.debug('Starting Salt.Box Gateway lifespan context manager')
     health_checker = get_health_checker_service()
     health_task = None
     if health_checker:
@@ -28,7 +27,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator:
     else:
         logger.warning('Health checker service is not available')
     yield
-    logger.debug('Ending Salt.Box Gateway lifespan context manager')
+
     if health_task:
         await health_checker.stop()
         health_task.cancel()
@@ -63,7 +62,8 @@ app.add_middleware(
     # Need add SETTINGS.base_url_root_path.rstrip('/') + uri in some cases
     excluded_paths=[uri for uri in [app.docs_url, app.openapi_url, app.swagger_ui_oauth2_redirect_url] if uri]
     + ['/health']
-    + [r'/discovery(?:/.*)?$'],
+    + [r'/discovery(?:/.*)?$']
+    + [r'/system/[\w-]+/authorized_keys'],
 )
 
 app.add_exception_handler(GatewayError, custom_http_handler)
