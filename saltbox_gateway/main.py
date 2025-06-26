@@ -6,9 +6,12 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from saltbox_gateway import __version__
-from saltbox_gateway.api.discovery_router import router as discovery_router
 from saltbox_gateway.config import APP_DESC, APP_NAME, SETTINGS, logger
+from saltbox_gateway.errors import GatewayError
+from saltbox_gateway.exception_handlers import custom_http_handler
 from saltbox_gateway.middlwares.authn import AuthMiddleware
+from saltbox_gateway.routers.discovery_router import router as discovery_router
+from saltbox_gateway.routers.proxy_router import router as proxy_router
 from saltbox_gateway.services.health_checker import get_health_checker_service
 from saltbox_gateway.utils.redis_cache import CustomRedisCache
 from saltbox_gateway.utils.redis_config import RedisDependency, close_redis_pool, get_redis_connection
@@ -63,6 +66,8 @@ app.add_middleware(
     + [r'/discovery(?:/.*)?$'],
 )
 
+app.add_exception_handler(GatewayError, custom_http_handler)
+
 
 @app.get('/health', openapi_extra={'x-opa-policy': 'health_check'})
 async def health_check(redis: RedisDependency) -> dict:
@@ -76,3 +81,4 @@ async def health_check(redis: RedisDependency) -> dict:
 
 
 app.include_router(discovery_router)
+app.include_router(proxy_router)

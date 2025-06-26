@@ -5,23 +5,34 @@ from typing import Any, cast
 
 import httpx
 import jwt
-from fastapi import Request, status
+from fastapi import Request
 from pydantic import ValidationError
 
 from saltbox_gateway.config import SETTINGS, logger
+from saltbox_gateway.errors import (
+    AuthorizationHeaderInvalidError,
+    AuthorizationUrlError,
+    IssuerError,
+    JWKSFetchError,
+    JWKSFetchTimeoutError,
+    JWKSKeyNotFoundError,
+    JWKSUriNotFoundError,
+    JWTDecodeHeaderError,
+    JWTExpiredError,
+    JWTInvalidTokenError,
+    JWTKidNotFoundError,
+    JWTValidationError,
+    KeycloakOIDCError,
+    OIDCConfigFetchError,
+    OIDCConfigTimeoutError,
+    OIDCConfigUnexpectedError,
+    TokenUrlError,
+)
 from saltbox_gateway.utils.httpx_client import HttpxClientSingletoneFactory
 from saltbox_gateway.utils.redis_cache import BaseCache, CustomRedisCache
 from saltbox_gateway.utils.redis_config import get_redis_connection
 
 request_context: ContextVar[Request] = ContextVar('request_context')
-
-
-class KeycloakOIDCError(Exception):
-    """Base class for Keycloak OIDC errors."""
-
-    def __init__(self, status_code: int, message: str) -> None:
-        self.status_code = status_code
-        self.message = message
 
 
 class KeycloakOIDC:
@@ -37,10 +48,6 @@ class KeycloakOIDC:
         logger.debug('Initializing KeycloakOIDC instance.')
         self._oidc_url = SETTINGS.keycloak_oidc_url
         self._httpx_client = httpx_client or httpx.AsyncClient()
-        # self._oidc_config_cache = CustomRedisCache(redis=self._redis, namespace='oidc_config')
-        # self._jwks_cache = CustomRedisCache(redis=self._redis, namespace='oidc_jwks')
-        # self._kid_key_cache = CustomRedisCache(redis=self._redis, namespace='oidc_kid_key')
-        # self._token_cache = CustomRedisCache(redis=self._redis, namespace='oidc_token')
         self._cache = cache
         self._issuer: str | None = None
         self._audience = audience
@@ -51,24 +58,16 @@ class KeycloakOIDC:
     @property
     def authorization_endpoint(self) -> str:
         if not self._authorization_endpoint:
-            raise KeycloakOIDCError(status.HTTP_401_UNAUTHORIZED, 'Authorization URL not found in OIDC config.')
+            raise AuthorizationUrlError()
 
         return self._authorization_endpoint
 
     @property
     def token_url(self) -> str:
         if not self._token_url:
-            raise KeycloakOIDCError(status.HTTP_401_UNAUTHORIZED, 'Token URL not found in OIDC config.')
+            raise TokenUrlError()
 
         return self._token_url
-
-    # # TODO (a.baikov): Deprecated
-    # async def init_config(self) -> None:
-    #     logger.debug('Initializing KeycloakOIDC configuration.')
-    #     oidc_config = await self._get_oidc_config()
-    #     self._token_url = oidc_config.get('token_endpoint')
-    #     self._authorization_endpoint = oidc_config.get('authorization_endpoint')
-    #     logger.debug('Token URL: %s, Auth URL: %s', self._token_url, self._authorization_endpoint)
 
     async def _get_oidc_config(self) -> dict[str, Any]:
         """Get OIDC configuration from Keycloak server and cache it.
@@ -90,7 +89,7 @@ class KeycloakOIDC:
             oidc_config = response.json()
             self._issuer = oidc_config.get('issuer')
             if not self._issuer:
-                raise KeycloakOIDCError(status.HTTP_401_UNAUTHORIZED, 'Issuer not found in OIDC config.')
+                raise IssuerError()
 
             self._algorithms = oidc_config.get('id_token_signing_alg_values_supported', self._algorithms)
 
@@ -100,21 +99,14 @@ class KeycloakOIDC:
                 logger.debug('OIDC config cached successfully')
             return cast(dict, oidc_config)
         except httpx.HTTPStatusError as e:
-            logger.warning('Error fetching OIDC config: %s', e)
-            raise KeycloakOIDCError(
-                status.HTTP_503_SERVICE_UNAVAILABLE, 'Error fetching OIDC config. Keycloak server is unavailable.'
-            ) from None
+            logger.exception('Error fetching OIDC config: %s', e)
+            raise OIDCConfigFetchError() from None
         except httpx.ReadTimeout as e:
-            logger.error('Timeout error fetching OIDC config: %s', e)
-            raise KeycloakOIDCError(
-                status.HTTP_503_SERVICE_UNAVAILABLE,
-                'Timeout error fetching OIDC config. Keycloak server is unavailable.',
-            ) from None
+            logger.exception('Timeout error fetching OIDC config: %s', e)
+            raise OIDCConfigTimeoutError() from None
         except Exception as e:
-            logger.exception('Unexpected error fetching OIDC config: %s', e)
-            raise KeycloakOIDCError(
-                status.HTTP_500_INTERNAL_SERVER_ERROR, 'Unexpected error fetching OIDC config'
-            ) from None
+            logger.error('Unexpected error fetching OIDC config: %s', e)
+            raise OIDCConfigUnexpectedError() from None
 
     async def _get_key_by_kid(self, token_kid: str) -> jwt.PyJWK:
         """Get the public key by KID from the JWKS and cache it.
@@ -134,7 +126,7 @@ class KeycloakOIDC:
         jwks = await self._get_jwks()
         public_keys = {key['kid']: key for key in jwks['keys']}
         if token_kid not in public_keys:
-            raise KeycloakOIDCError(status.HTTP_401_UNAUTHORIZED, 'Key not found in JWKS.')
+            raise JWKSKeyNotFoundError()
 
         if self._cache:
             await self._cache.set(token_kid, json.dumps(public_keys[token_kid]), 3600)
@@ -150,7 +142,7 @@ class KeycloakOIDC:
         oidc_config = await self._get_oidc_config()
         jwks_uri = oidc_config.get('jwks_uri')
         if not jwks_uri:
-            raise KeycloakOIDCError(status.HTTP_401_UNAUTHORIZED, 'JWKS URI not found in OIDC config.')
+            raise JWKSUriNotFoundError()
 
         if self._cache:
             cached_jwks = await self._cache.get(jwks_uri)
@@ -170,16 +162,11 @@ class KeycloakOIDC:
                 logger.debug('JWKS cached successfully with uri: %s', jwks_uri)
             return cast(dict[str, Any], jwks)
         except httpx.HTTPStatusError as e:
-            logger.warning('Error fetching JWKS: %s', e)
-            raise KeycloakOIDCError(
-                status.HTTP_503_SERVICE_UNAVAILABLE, 'Error fetching JWKS. Keycloak server is unavailable.'
-            ) from None
+            logger.exception('Error fetching JWKS: %s', e)
+            raise JWKSFetchError() from None
         except httpx.ReadTimeout as e:
-            logger.warning('Timeout error fetching JWKS: %s', e)
-            raise KeycloakOIDCError(
-                status.HTTP_503_SERVICE_UNAVAILABLE,
-                'Timeout error fetching JWKS. Keycloak server is unavailable.',
-            ) from None
+            logger.exception('Timeout error fetching JWKS: %s', e)
+            raise JWKSFetchTimeoutError() from None
 
     async def decode_jwt(self, token: str | None) -> dict[str, str | list[str]]:  # noqa: C901
         """Decode the JWT token and verify its signature.
@@ -192,7 +179,7 @@ class KeycloakOIDC:
             KeycloakOIDCError: If the token is invalid or expired.
         """
         if not token or not token.startswith('Bearer '):
-            raise KeycloakOIDCError(status.HTTP_401_UNAUTHORIZED, 'Authorization header is missing or invalid.')
+            raise AuthorizationHeaderInvalidError()
         token = token.removeprefix('Bearer').strip()
 
         if self._cache:
@@ -204,11 +191,11 @@ class KeycloakOIDC:
         try:
             unverified_header = jwt.get_unverified_header(token)
         except jwt.DecodeError as e:
-            logger.warning('Decode error for JWT token header: %s', e)
-            raise KeycloakOIDCError(status.HTTP_401_UNAUTHORIZED, 'Decode error for JWT token header.') from None
+            logger.exception('Decode error for JWT token header: %s', e)
+            raise JWTDecodeHeaderError() from None
         token_kid = unverified_header.get('kid')
         if not token_kid:
-            raise KeycloakOIDCError(status.HTTP_401_UNAUTHORIZED, 'KID not found in token.')
+            raise JWTKidNotFoundError()
 
         pyjwk = await self._get_key_by_kid(token_kid)
 
@@ -239,17 +226,17 @@ class KeycloakOIDC:
                 await self._cache.set(token, json.dumps(decoded_token), ttl=ttl)
             return cast(dict[str, str | list[str]], decoded_token)
         except jwt.ExpiredSignatureError:
-            logger.warning('Token expired.')
-            raise KeycloakOIDCError(status.HTTP_401_UNAUTHORIZED, 'Token has expired') from None
+            logger.exception('Token expired.')
+            raise JWTExpiredError() from None
         except jwt.InvalidTokenError as e:
-            logger.warning('Invalid token: %s', e)
-            raise KeycloakOIDCError(status.HTTP_401_UNAUTHORIZED, f'Invalid token: {e!s}') from None
+            logger.exception('Invalid token: %s', e)
+            raise JWTInvalidTokenError(message=f'{e!s}') from None
         except ValidationError as e:
-            logger.warning('Token validation error: %s', e)
-            raise KeycloakOIDCError(status.HTTP_401_UNAUTHORIZED, 'Token validation error') from None
+            logger.exception('Token validation error: %s', e)
+            raise JWTValidationError() from e
         except Exception as e:
-            logger.exception('Unexpected error: %s', e)
-            raise KeycloakOIDCError(status.HTTP_500_INTERNAL_SERVER_ERROR, 'Unexpected error') from e
+            logger.error('Unexpected error: %s', e)
+            raise KeycloakOIDCError() from e
 
 
 class KeycloakOIDCFactory:
@@ -263,7 +250,7 @@ class KeycloakOIDCFactory:
             logger.debug('Get httpx.AsyncClient singletone')
             httpx_client = HttpxClientSingletoneFactory.get_instance()
             redis = get_redis_connection()
-            cache = CustomRedisCache(redis=redis, namespace='oidc', ttl=3600)
+            cache = CustomRedisCache(redis_client=redis, namespace='oidc', ttl=3600)
             logger.debug('Creating KeycloakOIDC instance with httpx client and cache.')
             cls._instance = KeycloakOIDC(httpx_client=httpx_client, cache=cache)
         return cls._instance

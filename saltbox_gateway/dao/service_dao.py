@@ -6,29 +6,16 @@ from fastapi.params import Depends
 from redis.asyncio import Redis
 
 from saltbox_gateway.config import SETTINGS
+from saltbox_gateway.errors import (
+    ServiceAlreadyExistsError,
+    ServiceCreationError,
+    ServiceDAOError,
+    ServiceDeletionError,
+    ServiceNameIsRequiredError,
+    ServiceNotFoundError,
+    ServiceUpdateError,
+)
 from saltbox_gateway.utils.redis_config import get_redis
-
-
-class ServiceDAOError(Exception):
-    """Base exception for ServiceDAO errors."""
-
-    pass
-
-
-class ServiceNotFoundError(ServiceDAOError):
-    """Exception raised when a service is not found."""
-
-    def __init__(self, service_name: str):
-        super().__init__(f'Service "{service_name}" not found.')
-        self.service_name = service_name
-
-
-class ServiceAlreadyExistsError(ServiceDAOError):
-    """Exception raised when a service already exists."""
-
-    def __init__(self, service_name: str):
-        super().__init__(f'Service "{service_name}" already exists.')
-        self.service_name = service_name
 
 
 class ServiceDAO:
@@ -52,11 +39,19 @@ class ServiceDAO:
                 raise ServiceDAOError(msg) from e
         return decoded
 
-    async def get(self, service_name: str) -> dict | None:
+    async def get(self, service_name: str) -> dict:
         service_key = f'{self._key_prefix}:{service_name}'
         service_data = await self.redis_client.hgetall(service_key)
+        if not service_data:
+            raise ServiceNotFoundError(service_name)
 
-        return self._decode_redis_hash(service_data) if service_data else None
+        return self._decode_redis_hash(service_data)
+
+    async def get_or_none(self, service_name: str) -> dict | None:
+        try:
+            return await self.get(service_name)
+        except ServiceNotFoundError:
+            return None
 
     async def list(self) -> list[dict]:
         keys = await self.redis_client.keys(f'{self._key_prefix}:*')
@@ -68,46 +63,18 @@ class ServiceDAO:
         return services
 
     async def create(self, service_data: dict) -> dict:
-        service_name = service_data.get('service_name')
-        if not service_name:
-            msg = 'Service name is required for creation.'
-            raise ServiceDAOError(msg)
-
-        service_key = f'{self._key_prefix}:{service_name}'
-        if await self.redis_client.exists(service_key):
-            raise ServiceAlreadyExistsError(service_name)
-
-        await self.redis_client.hset(
-            service_key, mapping={'data': json.dumps(service_data), 'last_updated': time.time()}
-        )
-        await self.redis_client.expire(service_key, SETTINGS.service_registration_ttl)
-        created_service = await self.redis_client.hgetall(service_key)
+        created_service = await self._save(service_data, must_exist=False)
 
         if not created_service:
-            msg = f'Failed to create service {service_name}'
-            raise ServiceDAOError(msg)
-
-        return self._decode_redis_hash(created_service)
+            raise ServiceCreationError(service_data.get('service_name', 'Unknown service'))
+        return created_service
 
     async def update(self, service_data: dict) -> dict:
-        service_name = service_data.get('service_name')
-        if not service_name:
-            msg = 'Service name is required for update.'
-            raise ServiceDAOError(msg)
+        updated_service = await self._save(service_data, must_exist=True)
 
-        service_key = f'{self._key_prefix}:{service_name}'
-        if not await self.redis_client.exists(service_key):
-            raise ServiceNotFoundError(service_name)
-
-        await self.redis_client.hset(
-            service_key, mapping={'data': json.dumps(service_data), 'last_updated': time.time()}
-        )
-        await self.redis_client.expire(service_key, SETTINGS.service_registration_ttl)
-        updated_service = await self.redis_client.hgetall(service_key)
         if not updated_service:
-            msg = f'Failed to update service {service_name}'
-            raise ServiceDAOError(msg)
-        return self._decode_redis_hash(updated_service)
+            raise ServiceUpdateError(service_data.get('service_name', 'Unknown service'))
+        return updated_service
 
     async def delete(self, service_name: str) -> None:
         service_key = f'{self._key_prefix}:{service_name}'
@@ -115,10 +82,32 @@ class ServiceDAO:
             raise ServiceNotFoundError(service_name)
         result = await self.redis_client.delete(service_key)
         if result == 0:
-            msg = f'Failed to delete service {service_name}'
-            raise ServiceDAOError(msg)
+            raise ServiceDeletionError(service_name)
 
         return None
+
+    async def _save(self, service_data: dict, must_exist: bool) -> dict | None:
+        service_name = service_data.get('service_name')
+        if not service_name:
+            raise ServiceNameIsRequiredError()
+
+        service_key = f'{self._key_prefix}:{service_name}'
+        exists = await self.redis_client.exists(service_key)
+        if must_exist and not exists:
+            raise ServiceNotFoundError(service_name)
+        if not must_exist and exists:
+            raise ServiceAlreadyExistsError(service_name)
+
+        await self.redis_client.hset(
+            service_key, mapping={'data': json.dumps(service_data), 'last_updated': time.time()}
+        )
+        await self.redis_client.expire(service_key, SETTINGS.service_registration_ttl)
+        saved_service = await self.redis_client.hgetall(service_key)
+
+        if not saved_service:
+            return None
+
+        return self._decode_redis_hash(saved_service)
 
 
 def get_service_dao(redis: Annotated[Redis, Depends(get_redis)]) -> ServiceDAO:

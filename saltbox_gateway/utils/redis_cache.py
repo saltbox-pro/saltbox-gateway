@@ -24,25 +24,25 @@ class BaseCache(ABC):
 class CustomRedisCache(BaseCache):
     """Custom Redis cache class."""
 
-    def __init__(self, redis: Redis, namespace: str, ttl: int = 3600) -> None:
-        self.redis = redis
-        self.namespace = namespace
-        self.ttl = ttl
+    def __init__(self, redis_client: Redis, namespace: str, ttl: int = 3600) -> None:
+        self._redis_client = redis_client
+        self._namespace = namespace
+        self._ttl = ttl
 
     async def _format_key(self, key: str) -> str:
         """Format the key with the namespace."""
-        return f'cache:{self.namespace}:{key}'
+        return f'cache:{self._namespace}:{key}'
 
     async def get(self, key: str) -> Any:
         key = await self._format_key(key)
-        return await self.redis.get(key)
+        return await self._redis_client.get(key)
 
     async def set(self, key: str, value: Any, ttl: int | None = None) -> None:
         key = await self._format_key(key)
-        ttl = ttl or self.ttl
+        ttl = ttl or self._ttl
         if isinstance(value, dict):
             value = json.dumps(value)
-        await self.redis.setex(key, ttl, value)
+        await self._redis_client.setex(key, ttl, value)
 
     @classmethod
     async def clear_cache(cls, redis: Redis, namespace: str | None = None) -> None:

@@ -20,20 +20,17 @@ class AsyncRedisLocker:
     async def acquire(self) -> bool:
         """Acquiring a lock"""
         attempts = 0
-        logger.debug(f'Attempting to acquire lock: {self._key} with value: {self._value}')
         while attempts < self._max_attempts:
-            logger.debug(f'Attempt №{attempts + 1} to acquire lock: {self._key}')
             if await self._redis.set(self._key, self._value, ex=self._ttl, nx=True):
-                logger.debug('Lock acquired...')
+                logger.debug(f'Lock acquired with attempt #{attempts + 1}: {self._key} ({self._value})')
                 return True
             await asyncio.sleep(0.1)
             attempts += 1
-        logger.debug(f'Failed to acquire lock after {self._max_attempts} attempts')
+        logger.warning(f'Failed to acquire lock after {self._max_attempts} attempts')
         return False
 
     async def release(self) -> None:
         """Releasing a lock"""
-        logger.debug(f'Releasing lock: {self._key} with value: {self._value}')
         # Use Lua script to ensure atomicity
         script = """
         if redis.call("get", KEYS[1]) == ARGV[1] then
@@ -42,11 +39,11 @@ class AsyncRedisLocker:
             return 0
         end
         """
-        result = await self._redis.eval(script, 1, self._key, self._value)  # type: ignore[no-untyped-call]
-        if result:
-            logger.debug('Lock released successfully')
+        released = await self._redis.eval(script, 1, self._key, self._value)  # type: ignore[no-untyped-call]
+        if released:
+            logger.debug(f'Lock released for: {self._key} ({self._value})')
         else:
-            logger.warning('Lock release failed or lock was not held by this instance')
+            logger.warning(f'Lock release failed or lock not held: {self._key}')
 
     async def __aenter__(self) -> 'AsyncRedisLocker':
         """Context manager enter method"""
@@ -64,8 +61,6 @@ class AsyncRedisLocker:
         await self.release()
         if exc_type:
             logger.error(f'Exception occurred while using lock: {self._key}: {exc_value}')
-        else:
-            logger.debug(f'Lock used successfully: {self._key}')
 
 
 class AsyncRedisLockerFactory:

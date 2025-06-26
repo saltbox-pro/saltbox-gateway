@@ -25,14 +25,12 @@ class HealthChecker:
 
     async def start(self) -> None:
         """Start the health checker service."""
-        # Implementation for starting the health checker service with asyncio
         self.running = True
         await self._health_check_loop()
 
     async def stop(self) -> None:
         """Stop the health checker service."""
         self.running = False
-        # Implementation for stopping the health checker service
 
     async def _health_check_loop(self) -> None:
         """Main loop for periodic health checks."""
@@ -49,7 +47,6 @@ class HealthChecker:
             logger.info('No services registered for health check')
             return
 
-        logger.info(f'Checking health for {len(services_data)} services')
         services = [ServiceSchema(**service.get('data', {})) for service in services_data]
         await asyncio.gather(*(self._check_service_instances(service) for service in services))
 
@@ -59,7 +56,6 @@ class HealthChecker:
             try:
                 response = await self._httpx_client.get(url, timeout=SETTINGS.health_check_timeout)
                 if response.status_code == 200:
-                    logger.info(f'Service {service.service_name} instance {instance.host}:{instance.port} is healthy')
                     instance.healthy = True
                     instance.last_check = instance.last_healthy = time.time()
                 else:
@@ -86,26 +82,12 @@ class HealthChecker:
 
         service.instances = updated_instances
 
-        # Try to discover endpoints for all instances
-        # if service.auto_discover_routes:
-        #     logger.info(f'Discovering endpoints for service {service.service_name}')
-        #     endpoints = []
-        #     for inst in (inst for inst in service.instances if inst.healthy):
-        #         endpoints = await self._discover_endpoints(inst)
-        #         logger.debug(f'Discovered endpoints for {inst.host}:{inst.port}: {endpoints}')
-        #         if endpoints:
-        #             break
-        #     service.endpoints = endpoints
-
+        # TODO: maybe we should discover endpoints for all healthy instances (if versions are different)
         first_healthy = next((inst for inst in service.instances if inst.healthy), None)
         if first_healthy and service.auto_discover_routes:
-            logger.info(f'Discovering endpoints for service {service.service_name}')
             discovered_endpoints = await self._discover_endpoints(first_healthy)
-            logger.debug(f'Discovered {len(discovered_endpoints)} endpoints for {service.service_name}')
             if discovered_endpoints:
                 service.endpoints = discovered_endpoints
-        else:
-            logger.info(f'No healthy instances found for service {service.service_name}, skipping endpoint discovery')
 
         async with self._locker.create(key=service.service_name):
             await self._dao.update(service.model_dump())
@@ -125,12 +107,10 @@ class HealthChecker:
 def get_health_checker_service() -> HealthChecker:
     """Get the HealthChecker service instance."""
     redis_client = get_redis_connection()
-    logger.debug(f'Using Redis client: {redis_client}')
     dao = get_service_dao(redis_client)
-    logger.debug(f'Using ServiceDAO: {dao}')
-    return HealthChecker(
-        dao, AsyncRedisLockerFactory(redis_client=redis_client), HttpxClientSingletoneFactory.get_instance()
-    )
+    locker_factory = AsyncRedisLockerFactory(redis_client=redis_client)
+    httpx_client = HttpxClientSingletoneFactory.get_instance()
+    return HealthChecker(dao=dao, locker_factory=locker_factory, httpx_client=httpx_client)
 
 
 def get_health_checker(
