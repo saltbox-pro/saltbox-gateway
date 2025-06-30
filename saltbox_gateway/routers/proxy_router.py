@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, Response
 
 from saltbox_gateway.services.proxy import ProxyService, get_proxy_service
 
-router = APIRouter(prefix='/api', tags=['API Proxy'])
+router = APIRouter(prefix='/api', tags=['API Proxy'], include_in_schema=False)
 
 
 @router.api_route('/{service_name}/{path:path}', methods=['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'])

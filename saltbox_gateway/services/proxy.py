@@ -148,5 +148,9 @@ def get_proxy_service(
     balancing_factory = balancing_strategy_factory(redis_client)
     cache = CustomRedisCache(redis_client=redis_client, namespace='gate_cache')
     return ProxyService(
-        request=request, dao=dao, balancing_factory=balancing_factory, httpx_client=httpx_client, cache=cache
+        request=request,
+        dao=dao,
+        balancing_factory=balancing_factory,
+        httpx_client=httpx_client,
+        cache=cache,
     )
