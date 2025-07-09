@@ -8,10 +8,10 @@ from redis.asyncio import Redis
 
 from saltbox_gateway.config import SETTINGS, logger
 from saltbox_gateway.dao.service_dao import ServiceDAO, get_service_dao
-from saltbox_gateway.schemas import ServiceEndpoint, ServiceInstance, ServiceSchema
 from saltbox_gateway.utils.httpx_client import HttpxClientSingletoneFactory
 from saltbox_gateway.utils.redis_config import get_redis, get_redis_connection
 from saltbox_gateway.utils.redis_locker import AsyncRedisLockerFactory
+from saltbox_sdk.discovery_client.schemas import ServiceInstance, ServiceSchema
 
 
 class HealthChecker:
@@ -51,23 +51,25 @@ class HealthChecker:
         await asyncio.gather(*(self._check_service_instances(service) for service in services))
 
     async def _check_service_instances(self, service: ServiceSchema) -> None:
-        async def check_instance(instance: ServiceInstance, health_path: str = '/health') -> ServiceInstance:
-            url = f'http://{instance.host}:{instance.port}{health_path}'
+        async def check_instance(instance: ServiceInstance) -> ServiceInstance:
+            url = f'http://{instance.host}:{instance.port}{instance.health_check_path}'
+            logger.debug(f'Checking health on {url} for service {service.name}')
             try:
                 response = await self._httpx_client.get(url, timeout=SETTINGS.health_check_timeout)
+                logger.debug(f'HTTP {response.status_code}')
                 if response.status_code == 200:
                     instance.healthy = True
                     instance.last_check = instance.last_healthy = time.time()
                 else:
                     logger.warning(
-                        f'Service {service.service_name} instance {instance.host}:{instance.port} unhealthy: '
+                        f'Service {service.name} instance {instance.host}:{instance.port} unhealthy: '
                         f'HTTP {response.status_code}'
                     )
                     instance.healthy = False
                     instance.last_check = time.time()
             except Exception as e:
                 logger.error(
-                    f'Service {service.service_name} instance {instance.host}:{instance.port} health check failed: {e}'
+                    f'Service {service.name} instance {instance.host}:{instance.port} health check failed: {e}'
                 )
                 instance.healthy = False
                 instance.last_check = time.time()
@@ -82,26 +84,27 @@ class HealthChecker:
 
         service.instances = updated_instances
 
-        # TODO: maybe we should discover endpoints for all healthy instances (if versions are different)
-        first_healthy = next((inst for inst in service.instances if inst.healthy), None)
-        if first_healthy and service.auto_discover_routes:
-            discovered_endpoints = await self._discover_endpoints(first_healthy)
-            if discovered_endpoints:
-                service.endpoints = discovered_endpoints
+        # TODO: Deprecated
+        # first_healthy = next((inst for inst in service.instances if inst.healthy), None)
+        # if first_healthy and service.auto_discover_routes:
+        #     discovered_endpoints = await self._discover_endpoints(first_healthy)
+        #     if discovered_endpoints:
+        #         service.endpoints = discovered_endpoints
 
-        async with self._locker.create(key=service.service_name):
+        async with self._locker.create(key=service.name):
             await self._dao.update(service.model_dump())
 
-    async def _discover_endpoints(self, instance: ServiceInstance) -> list[ServiceEndpoint]:
-        """Discover endpoints for a service instance."""
-        base_route = f'/{instance.base_route.strip("/")}' if instance.base_route else ''
-        url = f'http://{instance.host}:{instance.port}{base_route}/openapi-routes'
-        response = await self._httpx_client.get(url, timeout=SETTINGS.proxy_request_timeout)
-        if response.status_code == 200:
-            routes_data = response.json()
-            if 'endpoints' in routes_data:
-                return [ServiceEndpoint(**endpoint) for endpoint in routes_data['endpoints']]
-        return []
+    # TODO: Deprecated
+    # async def _discover_endpoints(self, instance: ServiceInstance) -> list[ServiceEndpoint]:
+    #     """Discover endpoints for a service instance."""
+    #     base_route = f'/{instance.base_route.strip("/")}' if instance.base_route else ''
+    #     url = f'http://{instance.host}:{instance.port}{base_route}/discovery/openapi-routes'
+    #     response = await self._httpx_client.get(url, timeout=SETTINGS.proxy_request_timeout)
+    #     if response.status_code == 200:
+    #         routes_data = response.json()
+    #         if 'endpoints' in routes_data:
+    #             return [ServiceEndpoint(**endpoint) for endpoint in routes_data['endpoints']]
+    #     return []
 
 
 def get_health_checker_service() -> HealthChecker:
