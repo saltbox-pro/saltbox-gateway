@@ -4,10 +4,37 @@ from fastapi import APIRouter, Body, Depends
 
 from saltbox_gateway.config import logger
 from saltbox_gateway.errors import DiscoveryServiceError
-from saltbox_gateway.schemas import DiscoveryResponse, ProxyBalancingStrategy, ServiceInstance, ServiceSchema
+from saltbox_gateway.schemas import (
+    DiscoveryServiceConfig,
+)
 from saltbox_gateway.services.discovery import DiscoveryService, get_discovery_service
+from saltbox_gateway.utils.redis_config import RedisDependency
+from saltbox_sdk.discovery_client.schemas import (
+    DiscoveryResponse,
+    ProxyBalancingStrategy,
+    ServiceSchema,
+)
 
-router = APIRouter(prefix='/discovery', tags=['Discovery'])
+router = APIRouter(prefix='/api/discovery', tags=['Discovery'])
+
+
+@router.get('/health')
+async def health_check(redis: RedisDependency) -> dict:
+    """Health check для API Gateway"""
+    try:
+        pong = await redis.ping()
+        return {'status': 'healthy', 'service': 'api-gateway', 'redis': pong}
+    except Exception:
+        raise DiscoveryServiceError() from None
+
+
+@router.get('/config')
+async def get_full_config(
+    discovery_service: Annotated[DiscoveryService, Depends(get_discovery_service)],
+) -> DiscoveryServiceConfig:
+    """Get full configuration for the frontend."""
+    config = await discovery_service.get_config()
+    return config
 
 
 @router.post('/register')
@@ -16,12 +43,13 @@ async def register_service(
     discovery_service: Annotated[DiscoveryService, Depends(get_discovery_service)],
 ) -> DiscoveryResponse:
     """Register a new service in the discovery system."""
-
+    logger.debug(f'Registering service: {service_info.name}')
+    logger.debug(f'Instances: {[inst.host for inst in service_info.instances]}')
     try:
         service = await discovery_service.process(service_info)
         return DiscoveryResponse(
             success=True,
-            message=f'Service {service.service_name} registered successfully',
+            message=f'Service {service.name} registered successfully',
         )
     except DiscoveryServiceError as e:
         logger.exception(f'Discovery service error: {e}')
@@ -31,26 +59,32 @@ async def register_service(
         )
 
 
-# TODO: refactor this endpoint
-@router.post('/unregister/{service_name}')
-async def remove_service_or_instance(
+@router.delete('/unregister/{service_name}')
+async def remove_service(
     service_name: str,
     discovery_service: Annotated[DiscoveryService, Depends(get_discovery_service)],
-    instance: Annotated[ServiceInstance | None, Body(embed=True)] = None,
 ) -> DiscoveryResponse:
     """Unregister a specific service instance or the entire service."""
-    if instance:
-        await discovery_service.remove_service_instance(service_name, instance.host, instance.port)
-        return DiscoveryResponse(
-            success=True,
-            message=f'{instance.host}:{instance.port} of service {service_name} unregistered successfully',
-        )
-    else:
-        await discovery_service.remove_service(service_name)
-        return DiscoveryResponse(
-            success=True,
-            message=f'Service {service_name} unregistered successfully',
-        )
+
+    await discovery_service.remove_service(service_name)
+    return DiscoveryResponse(
+        success=True,
+        message=f'Service {service_name} unregistered successfully',
+    )
+
+
+@router.delete('/unregister/{service_name}/{instance_id}')
+async def remove_instance(
+    service_name: str,
+    instance_id: str,
+    discovery_service: Annotated[DiscoveryService, Depends(get_discovery_service)],
+) -> DiscoveryResponse:
+    """Unregister a specific service instance or the entire service."""
+    await discovery_service.remove_service_instance(service_name, instance_id)
+    return DiscoveryResponse(
+        success=True,
+        message=f'{instance_id} of service {service_name} unregistered successfully',
+    )
 
 
 @router.get('/services')
