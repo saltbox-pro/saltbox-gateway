@@ -13,7 +13,7 @@ class AccessModel(BaseModel):
 
 
 class User(BaseModel):
-    sub: str  # = Field(serialization_alias='id')
+    sub: str
     resource_access: dict[str, AccessModel] | None = Field(default=None, exclude=True)
     email_verified: bool
     name: str
