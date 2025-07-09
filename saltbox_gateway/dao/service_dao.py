@@ -66,14 +66,14 @@ class ServiceDAO:
         created_service = await self._save(service_data, must_exist=False)
 
         if not created_service:
-            raise ServiceCreationError(service_data.get('service_name', 'Unknown service'))
+            raise ServiceCreationError(service_data.get('name', 'Unknown service'))
         return created_service
 
     async def update(self, service_data: dict) -> dict:
         updated_service = await self._save(service_data, must_exist=True)
 
         if not updated_service:
-            raise ServiceUpdateError(service_data.get('service_name', 'Unknown service'))
+            raise ServiceUpdateError(service_data.get('name', 'Unknown service'))
         return updated_service
 
     async def delete(self, service_name: str) -> None:
@@ -87,7 +87,7 @@ class ServiceDAO:
         return None
 
     async def _save(self, service_data: dict, must_exist: bool) -> dict | None:
-        service_name = service_data.get('service_name')
+        service_name = service_data.get('name')
         if not service_name:
             raise ServiceNameIsRequiredError()
 
