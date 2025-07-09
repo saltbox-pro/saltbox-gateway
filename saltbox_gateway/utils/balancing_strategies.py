@@ -5,7 +5,7 @@ from collections.abc import Callable
 from redis.asyncio import Redis
 
 from saltbox_gateway.config import logger
-from saltbox_gateway.schemas import ProxyBalancingStrategy, ServiceInstance
+from saltbox_sdk.discovery_client.schemas import ProxyBalancingStrategy, ServiceInstance
 
 
 class BalancingStrategy(ABC):
