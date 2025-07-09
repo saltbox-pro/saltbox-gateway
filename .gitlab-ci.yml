@@ -3,7 +3,7 @@
 stages:
   - lint
 
-.lint-job:
+ruff:
   stage: lint
   variables:
     PIP_CACHE_DIR: '$CI_PROJECT_DIR/.cache/pip'
@@ -11,18 +11,22 @@ stages:
   before_script:
     - apk add git
     - pip3 install -e .[dev]
+  script:
+    ruff check saltbox_gateway # --select I --fix
   cache:
     paths:
       - '.cache/pip/'
-  rules:
-    - if: $LINTING_ENABLED == 'true'
-
-ruff:
-  extends: .lint-job
-  script:
-    ruff check saltbox_gateway # --select I --fix
 
 mypy:
-  extends: .lint-job
+  stage: lint
+  variables:
+    PIP_CACHE_DIR: '$CI_PROJECT_DIR/.cache/pip'
+  image: python:3.12-alpine
+  before_script:
+    - apk add git
+    - pip3 install -e .[dev]
   script:
     mypy saltbox_gateway
+  cache:
+    paths:
+      - '.cache/pip/'
