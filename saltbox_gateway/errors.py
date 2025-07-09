@@ -101,6 +101,18 @@ class ServiceIsNotOfficial(DiscoveryServiceError):
         super().__init__(self.detail)
 
 
+class ServiceInstanceNotFoundError(DiscoveryServiceError):
+    """Exception raised when a service instance is not found."""
+
+    status_code = status.HTTP_404_NOT_FOUND
+
+    def __init__(self, service_name: str, instance_id: str) -> None:
+        self.service_name = service_name
+        self.instance_id = instance_id
+        self.detail = f'Service instance "{instance_id}" not found in service "{service_name}".'
+        super().__init__(self.detail)
+
+
 # Proxy Errors
 class ProxyServiceError(GatewayError):
     """Base exception for ProxyService errors."""
@@ -127,6 +139,33 @@ class NoHealthyInstanceError(ProxyServiceError):
     def __init__(self, service_name: str) -> None:
         self.service_name = service_name
         self.detail = f'No healthy instance found for service "{service_name}".'
+        super().__init__(self.detail)
+
+
+class NotEnoughPermissionsError(ProxyServiceError):
+    """Exception raised when the user does not have enough permissions to access a service."""
+
+    status_code = status.HTTP_403_FORBIDDEN
+
+    def __init__(self, service_name: str, path: str | None = None) -> None:
+        self.service_name = service_name
+        self.path = path
+        if path:
+            self.detail = f'You do not have enough permissions to access "{path}" of service "{service_name}".'
+        else:
+            self.detail = f'You do not have enough permissions to access service "{service_name}".'
+        super().__init__(self.detail)
+
+
+class ProxyStaticFileError(ProxyServiceError):
+    """Exception raised when there is an error proxying a static file."""
+
+    status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+
+    def __init__(self, message: str | None = None) -> None:
+        self.detail = 'An error occurred while proxying the static file.'
+        if message:
+            self.detail = self.detail + f' Details: {message}'
         super().__init__(self.detail)
 
 
