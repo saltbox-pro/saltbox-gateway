@@ -169,6 +169,43 @@ class ProxyStaticFileError(ProxyServiceError):
         super().__init__(self.detail)
 
 
+class ProxyOpaClientInitializationError(ProxyServiceError):
+    """Exception raised when there is an error initializing the OPA client."""
+
+    status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+
+    def __init__(self, message: str | None = None) -> None:
+        self.detail = 'An error occurred while initializing the OPA client.'
+        if message:
+            self.detail = self.detail + f' Details: {message}'
+        super().__init__(self.detail)
+
+
+# OPA Client Errors
+class AsyncOpaClientError(GatewayError):
+    """Base exception for OPA client errors."""
+
+    status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+    detail: str = 'An error occurred while communicating with the OPA server.'
+
+    def __init__(self, message: str | None = None) -> None:
+        if message:
+            self.detail = f'{self.detail} Details: {message}'
+        super().__init__(self.detail)
+
+
+class OpaRequestError(AsyncOpaClientError):
+    """Exception raised when there is an error making a request to the OPA server."""
+
+    detail: str = 'An error occurred while making a request to the OPA server.'
+
+
+class OpaResponseFormatError(AsyncOpaClientError):
+    """Exception raised when the OPA server response format is invalid."""
+
+    detail: str = 'Invalid OPA response format.'
+
+
 # Keycloak OIDC Errors
 class KeycloakOIDCError(GatewayError):
     """Base class for Keycloak OIDC errors."""
