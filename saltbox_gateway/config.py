@@ -9,8 +9,8 @@ APP_DESC = 'Salt.Box Gateway and Service Discovery API'
 
 
 class Settings(BaseSettings):
-    debug: bool = False
-    show_docs: bool = False
+    log_level: str = 'INFO'
+    base_url: str
     basic_auth_username: str = ''
     basic_auth_password: str = ''
     origins: list[str] = Field(['*'], description='CORS allowed resources')
@@ -25,8 +25,7 @@ class Settings(BaseSettings):
     keycloak_client: str = ''
     keycloak_client_secret: str = ''
     opa_url: str = ''
-    rabbitmq_url: str = 'amqp://guest:guest@rabbitmq:5672'
-    official_modules: list[str] = ['saltbox-core', 'saltbox-processing']
+    official_modules: list[str] = ['core', 'processing']
     service_registration_ttl: int = 3600
     proxy_request_timeout: int = 10
     health_check_interval: int = 15
@@ -68,7 +67,7 @@ SETTINGS = Settings()
 
 class LogConfig(BaseModel):
     LOG_FORMAT: str = '%(levelprefix)s [%(filename)s:%(lineno)d] %(message)s'
-    LOG_LEVEL: str = 'DEBUG' if SETTINGS.debug else 'INFO'
+    LOG_LEVEL: str = SETTINGS.log_level.upper()
 
     version: int = 1
     disable_existing_loggers: bool = False
@@ -87,7 +86,7 @@ class LogConfig(BaseModel):
         },
     }
     loggers: dict = {
-        'salt_box_core': {
+        'saltbox_gateway': {
             'handlers': ['default'],
             'level': LOG_LEVEL,
             'propagate': False,
@@ -99,4 +98,4 @@ LOG_CONFIG = LogConfig()
 
 logging.config.dictConfig(LOG_CONFIG.model_dump())
 
-logger = logging.getLogger('salt_box_core')
+logger = logging.getLogger('saltbox_gateway')
