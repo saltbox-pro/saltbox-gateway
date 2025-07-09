@@ -13,6 +13,7 @@ from saltbox_gateway.dao.service_dao import ServiceDAO, get_service_dao
 from saltbox_gateway.errors import (
     NoHealthyInstanceError,
     NotEnoughPermissionsError,
+    ProxyOpaClientInitializationError,
     ProxyStaticFileError,
     ServiceDisabledError,
 )
@@ -56,9 +57,8 @@ class ProxyService:
         if not service.enabled:
             raise ServiceDisabledError(service.name)
 
-        instance = await self._get_instance(service)
+        instance = await self._choose_healthy_instance(service)
 
-        # TODO: Add base_url to the path
         url = f'http://{instance.host}:{instance.port}/{path.lstrip("/")}'
         logger.debug(f'Using instance: {instance.host}, URL: {url}')
 
@@ -66,8 +66,8 @@ class ProxyService:
 
         endpoint_config = await self._get_endpoint_config(instance, request_params['method'], path)
         logger.debug(f'Using endpoint config: {endpoint_config}')
-
-        cache_key = f'{service_name}:{path}:{request_params["method"]}:{request_params.get("params", "")!s}'
+        user_id = self._request.state.user.get('sub', 'anonymous')
+        cache_key = f'{user_id}:{service_name}:{path}:{request_params["method"]}:{request_params.get("params", "")!s}'
         response_data = None
 
         if endpoint_config.cache_ttl and self._cache:
@@ -128,10 +128,13 @@ class ProxyService:
     async def _check_opa_policy(self, opa_config: OPAConfig, method: str, path: str) -> dict:
         """Check OPA policy for the given method and path."""
         if not self._opa_client:
-            return {}
+            raise ProxyOpaClientInitializationError()
 
         input_data = {
-            'request': {'method': method.upper(), 'path': path.strip('/').split('/')},
+            'request': {
+                'method': method.upper(),
+                'path': path.strip('/').split('/'),
+            },
             'user': User(**self._request.state.user).model_dump(),
         }
 
@@ -198,7 +201,7 @@ class ProxyService:
             **kwargs,
         }
 
-    async def _get_instance(self, service: ServiceSchema) -> ServiceInstance:
+    async def _choose_healthy_instance(self, service: ServiceSchema) -> ServiceInstance:
         healthy_instances = [inst for inst in service.instances if inst.healthy]
 
         if not healthy_instances:
