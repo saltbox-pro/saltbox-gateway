@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, Response
 
 from saltbox_gateway.services.proxy import ProxyService, get_proxy_service
 
-router = APIRouter(prefix='/api', tags=['API Proxy'], include_in_schema=False)
+router = APIRouter(prefix='/api', tags=['API Proxy'])
 
 
 @router.api_route('/{service_name}/{path:path}', methods=['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'])
@@ -24,3 +24,15 @@ async def proxy_request(
         headers=dict(response.headers),
         media_type=response.headers.get('content-type'),
     )
+
+
+# @router.websocket('/ws/{user_id}')
+# async def websocket_proxy(
+#     user_id: str,
+#     secure_websocket: Annotated[Depends, Depends(get_proxy_service)],
+# ) -> None:
+#     """
+#     WebSocket proxy endpoint.
+#     This endpoint allows WebSocket connections to be proxied to the appropriate service.
+#     """
+#     pass
