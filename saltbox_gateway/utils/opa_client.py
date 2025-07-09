@@ -3,6 +3,7 @@ from typing import Any
 from httpx import AsyncClient
 
 from saltbox_gateway.config import SETTINGS, logger
+from saltbox_gateway.errors import OpaRequestError, OpaResponseFormatError
 from saltbox_gateway.utils.httpx_client import HttpxClientSingletoneFactory
 from saltbox_gateway.utils.rego import ast, sql
 from saltbox_gateway.utils.rego.mongo_visitor import MongoQueryVisitor
@@ -10,18 +11,6 @@ from saltbox_gateway.utils.rego.sql_visitor import SQLQueryVisitor
 from saltbox_sdk.discovery_client.schemas import OPAQueryFilterFormat
 
 type Decision = dict[str, Any]
-
-
-class OPACheckPolicyException(Exception):
-    """Exception raised when OPA check policy fails."""
-
-    pass
-
-
-class OPACompileException(Exception):
-    """Exception raised when OPA compile fails."""
-
-    pass
 
 
 class AsyncOpaClient:
@@ -69,18 +58,16 @@ class AsyncOpaClient:
         response = await self._client.post(url, json=data, timeout=self.timeout)
         logger.debug('OPA check policy response: %s', response.content)
         if not response.is_success:
-            msg = f'OPA check policy request failed: {response.status_code} {response.text}'
-            raise OPACheckPolicyException(msg)
+            raise OpaRequestError(response.text)
         result = response.json().get('result', {})
         if not isinstance(result, dict):
-            msg = f'Invalid OPA response: {result}'
-            raise OPACheckPolicyException(msg)
+            raise OpaResponseFormatError(result)
         if 'allow' not in result:
-            msg = f'OPA response does not contain "allow" field: {result}'
-            raise OPACheckPolicyException(msg)
+            msg = 'OPA response does not contain "allow" field'
+            raise OpaResponseFormatError(message=msg)
         if not isinstance(result['allow'], bool):
-            msg = f'OPA response "allow" field is not a boolean: {result}'
-            raise OPACheckPolicyException(msg)
+            msg = '"allow" field in OPA response is not a boolean'
+            raise OpaResponseFormatError(message=msg)
         logger.debug('OPA check policy result: %s', result)
         return result
 
@@ -105,8 +92,7 @@ class AsyncOpaClient:
         response = await self._client.post(url, json=data, timeout=self.timeout)
         logger.debug('OPA compile response: %s', response.content)
         if not response.is_success:
-            msg = f'OPA compile request failed: {response.status_code} {response.text}'
-            raise OPACompileException(msg)
+            raise OpaRequestError(message=response.text)
 
         queries: list = response.json().get('result', {}).get('queries', [])
 
