@@ -1,71 +1,59 @@
-from enum import Enum
+from pydantic import (
+    BaseModel,
+    Field,
+    computed_field,
+)
 
-from pydantic import BaseModel, Field
-
-
-class ProxyBalancingStrategy(str, Enum):
-    RANDOM = 'rand'
-    ROUND_ROBIN = 'rr'
-    WEIGHTED_ROUND_ROBIN = 'wrr'
-
-
-class ServiceType(str, Enum):
-    OFFICIAL = 'official'
-    THIRD_PARTY = 'third-party'
+from saltbox_gateway.config import SETTINGS
+from saltbox_sdk.discovery_client.schemas import ServiceFrontendConfig
 
 
-class ServiceStatus(str, Enum):
-    RUNNING = 'running'
-    STOPPED = 'stopped'
-    ERROR = 'error'
+class AccessModel(BaseModel):
+    roles: list[str] = Field(default=[])
 
 
-class ServiceInstance(BaseModel):
-    host: str
-    port: int
-    base_route: str | None = None
-    version: str | None = None
-    healthy: bool | None = None
-    last_check: float | None = None
-    last_healthy: float | None = None
+class User(BaseModel):
+    sub: str  # = Field(serialization_alias='id')
+    resource_access: dict[str, AccessModel] | None = Field(default=None, exclude=True)
+    email_verified: bool
+    name: str
+    email: str
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def roles(self) -> list[str]:
+        client_roles: list[str] = []
+        if self.resource_access:
+            try:
+                client_roles = self.resource_access[SETTINGS.keycloak_client].roles
+            except KeyError:
+                pass
+
+        return client_roles
 
 
-class OPAQueryFilterFormat(str, Enum):
-    MONGO = 'mongo'
-    SQL = 'sql'
+class KeycloakConfig(BaseModel):
+    authority: str
+    client_id: str
+    redirect_uri: str
+    client_secret: str | None = None
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def keycloak_oidc_url(self) -> str:
+        return f'{self.authority}/.well-known/openid-configuration'
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def keycloak_authorization_endpoint(self) -> str:
+        return f'{self.authority}/protocol/openid-connect/auth'
 
 
-class OPAConfig(BaseModel):
-    policy: str = 'public'
-    is_partial: bool = False
-    partial_query: str | None = None
-    unknowns: list[str] | None = None
-    query_filter_format: OPAQueryFilterFormat | None = None
+class DiscoveryServiceConfig(BaseModel):
+    auth_config: KeycloakConfig
+    services: list[ServiceFrontendConfig]
 
-
-class ServiceEndpoint(BaseModel):
-    path: str
-    method: str
-    summary: str = ''
-    description: str = ''
-    opa_config: OPAConfig = Field(default_factory=OPAConfig)
-    cache_ttl: int = 0
-
-
-class ServiceSchema(BaseModel):
-    service_name: str
-    service_type: ServiceType
-    display_name: str
-    description: str
-    vendor: str
-    instances: list[ServiceInstance]
-    endpoints: list[ServiceEndpoint] = []
-    health_check: str = '/health'
-    auto_discover_routes: bool = True
-    enabled: bool = True
-    balancing_strategy: ProxyBalancingStrategy = ProxyBalancingStrategy.RANDOM
-
-
-class DiscoveryResponse(BaseModel):
-    success: bool
-    message: str
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def keycloak_url(self) -> str:
+        return SETTINGS.keycloak_front_url.rstrip('/')
