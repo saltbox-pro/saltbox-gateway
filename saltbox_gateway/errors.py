@@ -1,4 +1,4 @@
-from fastapi import status
+from fastapi import WebSocketException, status
 
 
 class GatewayError(Exception):
@@ -372,3 +372,30 @@ class JWTValidationError(KeycloakOIDCError):
     def __init__(self) -> None:
         self.detail = 'Token validation error'
         super().__init__(self.detail)
+
+
+# WebSocket Errors
+class SecureWebSocketError(WebSocketException):
+    """Base class for secure WebSocket errors."""
+
+    status_code = status.WS_1011_INTERNAL_ERROR
+    detail: str = 'An unexpected error occurred in the secure WebSocket connection.'
+
+    def __init__(self, message: str | None = None) -> None:
+        if message:
+            self.detail = f'{self.detail} Details: {message}'
+        super().__init__(code=self.status_code, reason=self.detail)
+
+
+class SecureWebSocketPolicyViolation(SecureWebSocketError):
+    """Generic error means message violates policy of socket"""
+
+    status_code = status.WS_1008_POLICY_VIOLATION
+    detail: str = 'WebSocket policy violation occurred.'
+
+
+class SecureWebSocketServerError(SecureWebSocketError):
+    """Unexpected conditions prevents from fulfilling a request"""
+
+    status_code = status.WS_1011_INTERNAL_ERROR
+    detail: str = 'Internal server error in secure WebSocket connection.'

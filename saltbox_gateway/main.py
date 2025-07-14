@@ -15,6 +15,7 @@ from saltbox_gateway.routers.discovery_router import router as discovery_router
 from saltbox_gateway.routers.proxy_router import router as proxy_router
 from saltbox_gateway.routers.static_proxy_router import router as static_proxy_router
 from saltbox_gateway.services.health_checker import get_health_checker_service
+from saltbox_gateway.tmp_ws_proxy.router import ws_core_jobs_router, ws_core_tasks_router
 from saltbox_gateway.utils.custom_openapi import get_custom_openapi_schema
 from saltbox_gateway.utils.redis_cache import CustomRedisCache
 from saltbox_gateway.utils.redis_config import close_redis_pool, get_redis_connection
@@ -91,6 +92,8 @@ app.add_exception_handler(GatewayError, custom_http_handler)
 app.include_router(discovery_router)
 app.include_router(proxy_router, include_in_schema=False)
 app.include_router(static_proxy_router, include_in_schema=False)
+app.include_router(ws_core_jobs_router, include_in_schema=False)
+app.include_router(ws_core_tasks_router, include_in_schema=False)
 
 
 def custom_openapi() -> dict:
