@@ -43,7 +43,8 @@ class ProxyService:
         self._opa_client = opa_client
         self._cache = cache
 
-    async def proxy_request(
+    # TODO: Refactor this
+    async def proxy_request(  # noqa: C901
         self,
         service_name: str,
         path: str,
