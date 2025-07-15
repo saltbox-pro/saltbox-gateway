@@ -66,7 +66,11 @@ class ProxyService:
 
         endpoint_config = await self._get_endpoint_config(instance, request_params['method'], path)
         logger.debug(f'Using endpoint config: {endpoint_config}')
-        user_id = self._request.state.user.get('sub', 'anonymous')
+        if not hasattr(self._request.state, 'user'):
+            user_id = 'anonymous'
+        else:
+            user_id = self._request.state.user.get('sub', 'anonymous')
+
         cache_key = f'{user_id}:{service_name}:{path}:{request_params["method"]}:{request_params.get("params", "")!s}'
         response_data = None
 
