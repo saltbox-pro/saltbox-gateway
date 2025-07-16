@@ -13,17 +13,17 @@ Repository = "https://dev.saltbox.pro/saltbox/saltbox-gateway"
 
 [project.optional-dependencies]
 dev = [
-  "mypy>=1.16.1",
+  "mypy>=1.17.0",
   "pre-commit>=4.2.0",
-  "ruff>=0.11.13",
+  "ruff>=0.12.3",
   "types-redis",
 ]
 
 [dependency-groups]
 dev = [
-  "mypy>=1.16.1",
+  "mypy>=1.17.0",
   "pre-commit>=4.2.0",
-  "ruff>=0.11.13",
+  "ruff>=0.12.3",
   "types-redis",
 ]
 
