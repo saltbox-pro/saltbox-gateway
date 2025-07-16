@@ -1,6 +1,6 @@
 from datetime import datetime
 from enum import Enum
-from typing import Annotated, Any, Self, TypeVar, cast
+from typing import Annotated, Any, Self, TypeVar
 
 from pydantic import (
     AfterValidator,
@@ -69,14 +69,14 @@ class JobModel(BaseModel):
 
     @model_validator(mode='before')
     @classmethod
-    def _extract_kwargs(cls, data: T) -> T:
+    def _extract_kwargs(cls, data: Any) -> Any:
         # data may be an instantiated Job or potentially any object
         if not isinstance(data, dict):
             return data
 
         data['arg'], data['kwarg'] = fill_salt_kwarg_from_arg(data.get('arg'), data.get('kwarg'))
 
-        return cast(T, data)
+        return data
 
 
 class JobResult(BaseModel):
@@ -102,14 +102,14 @@ class JobResult(BaseModel):
 
     @model_validator(mode='before')
     @classmethod
-    def _extract_kwargs(cls, data: T) -> T:
+    def _extract_kwargs(cls, data: Any) -> Any:
         # data may be an instantiated Job or potentially any object
         if not isinstance(data, dict):
             return data
 
         data['fun_args'], data['fun_kwarg'] = fill_salt_kwarg_from_arg(data.get('fun_args'), data.get('fun_kwarg'))
 
-        return cast(T, data)
+        return data
 
 
 # Task-related schemas
