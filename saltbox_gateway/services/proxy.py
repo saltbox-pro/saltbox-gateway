@@ -198,7 +198,7 @@ class ProxyService:
 
         kwargs: dict[str, dict | bytes] = {'headers': headers, 'params': params}
 
-        if method in ['POST', 'PUT', 'PATCH']:
+        if method in ['POST', 'PUT', 'PATCH', 'DELETE']:
             kwargs['content'] = await self._request.body()
 
         return {
