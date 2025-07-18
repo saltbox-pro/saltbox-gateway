@@ -82,6 +82,7 @@ app.add_middleware(
     # Need add SETTINGS.base_url_root_path.rstrip('/') + uri in some cases
     excluded_paths=[uri for uri in [app.docs_url, app.openapi_url, app.swagger_ui_oauth2_redirect_url] if uri]
     + ['/api/core/docs', '/api/core/openapi.json']
+    + [r'/static/(.*)']
     + [r'/api/discovery(?:/.*)?$']
     + [r'/api/core/system/[\w-]+/authorized_keys'],
 )
