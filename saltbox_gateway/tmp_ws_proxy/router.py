@@ -9,6 +9,7 @@ from saltbox_gateway.tmp_ws_proxy.dao import JobDao, TaskDao
 from saltbox_gateway.tmp_ws_proxy.errors import JobDoesNotExistsException
 from saltbox_gateway.tmp_ws_proxy.schemas import IntJid, JobModel, JobResult, TaskModel
 from saltbox_gateway.tmp_ws_proxy.utils import JID
+from saltbox_gateway.utils.opa_client import get_opa_client
 from saltbox_gateway.utils.redis_config import RedisDependency
 from saltbox_gateway.utils.secure_websocket import PubSubAuthenticatedWebSocket
 
@@ -80,5 +81,28 @@ async def task_websocket(
             f'task:{tid}:job:*:return': JobResult,
             f'task:{tid}:job:*:new': job_new_handler,
             f'task:{tid}:update': TaskModel,
+        }
+    )
+
+
+# New WebSocket endpoint implementation (temporary not used)
+@ws_core_tasks_router.websocket('/new')
+async def tasks_websocket_new(websocket: WebSocket, rdb: RedisDependency) -> None:
+    opa_client = get_opa_client()
+    secure_websocket = PubSubAuthenticatedWebSocket(websocket, rdb)
+    if not secure_websocket.user:
+        msg = 'User not authenticated'
+        raise SecureWebSocketPolicyViolation(msg)
+    _opa_result = await opa_client.check_policy(
+        package='core.tasks',
+        input={
+            'user': secure_websocket.user.model_dump(),
+            'path': ['api', 'core', 'tasks'],
+        },
+    )
+    await secure_websocket.handle_pubsub(
+        {
+            f'task:{secure_websocket.user.sub}:*:create': TaskModel,
+            f'task:{secure_websocket.user.sub}*:update': TaskModel,
         }
     )

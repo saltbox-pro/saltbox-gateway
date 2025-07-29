@@ -13,7 +13,7 @@ async def proxy_request(
     path: str,
     proxy_service: Annotated[ProxyService, Depends(get_proxy_service)],
 ) -> Response:
-    response = await proxy_service.proxy_request(
+    response = await proxy_service.api_proxy(
         service_name=service_name,
         path=path,
     )

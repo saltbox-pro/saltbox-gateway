@@ -11,13 +11,17 @@ from redis.asyncio import Redis
 from saltbox_gateway.config import SETTINGS, logger
 from saltbox_gateway.dao.service_dao import ServiceDAO, get_service_dao
 from saltbox_gateway.errors import (
+    ApiProxyRequestError,
     NotEnoughPermissionsError,
-    ProxyOpaClientInitializationError,
+    # ProxyOpaClientInitializationError,
     ProxyStaticFileError,
     ServiceDisabledError,
+    ServiceEndpointNotFoundError,
+    ServiceHasNoEndpointsError,
     ServiceHasNoHealthyInstancesError,
+    ServiceHasNoInstancesError,
 )
-from saltbox_gateway.schemas import User
+from saltbox_gateway.schemas import ProxyRequestData
 from saltbox_gateway.utils.balancing_strategies import BalancingStrategy, balancing_strategy_factory
 from saltbox_gateway.utils.httpx_client import HttpxClientSingletoneFactory
 from saltbox_gateway.utils.opa_client import AsyncOpaClient
@@ -29,28 +33,221 @@ from saltbox_sdk.discovery_client.schemas import OPAConfig, ServiceEndpoint, Ser
 class ProxyService:
     def __init__(
         self,
-        request: Request,
+        request_data: ProxyRequestData,
         dao: ServiceDAO,
         balancing_factory: Callable[[str], BalancingStrategy],
+        opa_client: AsyncOpaClient,
         httpx_client: httpx.AsyncClient | None = None,
-        opa_client: AsyncOpaClient | None = None,
         cache: BaseCache | None = None,
-    ) -> None:
-        self._request = request
+    ):
+        self._request_data = request_data
         self._dao = dao
         self._balancing_factory = balancing_factory
         self._httpx_client = httpx_client or httpx.AsyncClient(timeout=SETTINGS.proxy_request_timeout)
         self._opa_client = opa_client
         self._cache = cache
 
-    # TODO: Refactor this
-    async def proxy_request(  # noqa: C901
-        self,
-        service_name: str,
-        path: str,
-    ) -> httpx.Response:
-        """Proxy a request to a service instance."""
-        logger.debug(f'Proxying request to service: {service_name}, path: {path}, method: {self._request.method}')
+    @classmethod
+    async def create(
+        cls,
+        request: Request,
+        dao: ServiceDAO,
+        balancing_factory: Callable[[str], BalancingStrategy],
+        opa_client: AsyncOpaClient,
+        httpx_client: httpx.AsyncClient | None = None,
+        cache: BaseCache | None = None,
+    ) -> 'ProxyService':
+        """Asynchronous factory method to create a ProxyService instance."""
+        raw_body = None
+        body = None
+        if request.method in ['POST', 'PUT', 'PATCH', 'DELETE']:
+            try:
+                raw_body = await request.body()
+                body = json.loads(raw_body)
+            except Exception:
+                raw_body = None
+                body = None
+        request_data = ProxyRequestData(
+            method=request.method.upper(),
+            path=request.url.path.strip('/'),
+            query_params=dict(request.query_params),
+            headers=dict(request.headers),
+            body=body,
+            raw_body=raw_body,
+            user=request.state.user,
+        )
+        return cls(
+            request_data=request_data,
+            dao=dao,
+            balancing_factory=balancing_factory,
+            opa_client=opa_client,
+            httpx_client=httpx_client,
+            cache=cache,
+        )
+
+    async def api_proxy(self, service_name: str, path: str) -> httpx.Response:
+        logger.debug(f'NEW Processing request for service: {service_name}, path: {path}')
+        service = await self._get_service(service_name)
+
+        service_instance = await self._choose_healthy_instance(service)
+        if not service_instance.endpoints:
+            raise ServiceHasNoEndpointsError(service.name)
+
+        endpoint = await self._get_endpoint(service_instance.endpoints, path)
+
+        if not endpoint:
+            raise ServiceEndpointNotFoundError(service.name, path)
+
+        url = f'http://{service_instance.host}:{service_instance.port}/{path.lstrip("/")}'
+
+        # TODO: refactor cache conditions
+        if endpoint.cache_ttl > 0:
+            cached_response = await self._get_response_from_cache()
+            if cached_response:
+                return cached_response
+
+        service_response = await self._get_response_from_service(url)
+
+        if endpoint.cache_ttl > 0 and self._is_response_cachable(service_response):
+            await self._add_response_to_cache(service_response, endpoint.cache_ttl)
+
+        return service_response
+
+    async def _check_access(
+        self, opa_config: OPAConfig, service_name: str, path: str, service_response: httpx.Response
+    ) -> None:
+        # компайл только для гет-запросов? Как разделить запросы к OPA для частичного и полного запроса?
+        if (
+            opa_config.policy
+            and opa_config.policy != 'public'
+            and opa_config.is_partial
+            and opa_config.partial_query is not None
+        ):
+            input_data = await self._prepare_input_for_opa(service_name, path)
+
+            opa_response = await self._opa_client.check_access(
+                package=opa_config.policy,
+                input=input_data,
+                is_partial=True,
+                unknowns=opa_config.unknowns or [],
+                partial_query=opa_config.partial_query,
+                query_filter_format=opa_config.query_filter_format,
+            )
+            if not opa_response.get('allow', False):
+                raise NotEnoughPermissionsError(service_name=service_name, path=path)
+
+            if opa_response.get('query') is not None:
+                self._request_data.query_params.update({'opa_query': opa_response['query']})
+
+        # if opa_config is not partial - check access for full query
+        if opa_config.policy and opa_config.policy != 'public' and not opa_config.is_partial:
+            try:
+                json_data = service_response.json().get('data', None)
+            except json.JSONDecodeError:
+                json_data = {}
+            input_data = await self._prepare_input_for_opa(service_name, path, object=json_data)
+            opa_response = await self._opa_client.check_access(
+                package=opa_config.policy,
+                input=input_data,
+                is_partial=False,
+            )
+
+    async def _prepare_input_for_opa(self, service_name: str, path: str, object: dict | None = None) -> dict:
+        return {
+            'subject': self._request_data.user.model_dump(),
+            'action': {
+                'method': self._request_data.method,
+            },
+            'resource': {
+                'service_name': service_name,
+                'path': path.strip('/').split('/'),
+                'query_params': self._request_data.query_params,
+                'object': object,
+                'body': self._request_data.body,
+            },
+        }
+
+    def _is_response_cachable(self, response: httpx.Response) -> bool:
+        if not self._request_data.is_cachable:
+            return False
+        if not response or not response.content:
+            return False
+        if response.status_code != 200:
+            return False
+        if 'Cache-Control' in response.headers and 'no-store' in response.headers['Cache-Control']:
+            return False
+        return True
+
+    async def _add_response_to_cache(self, response: httpx.Response, ttl: int) -> None:
+        if not self._cache:
+            logger.warning('Cache is not configured, skipping caching response')
+            return
+        cache_data = {
+            'status_code': response.status_code,
+            'headers': dict(response.headers),
+            'content': base64.b64encode(response.content).decode('ascii'),
+        }
+        await self._cache.set(self._request_data.cache_key, cache_data, ttl=ttl)
+
+    async def _get_response_from_cache(self) -> httpx.Response | None:
+        if not self._cache:
+            logger.warning('Cache is not configured, skipping cache lookup')
+            return None
+        if not self._request_data.is_cachable:
+            return None
+        cached_response = await self._cache.get(self._request_data.cache_key)
+        if cached_response:
+            if isinstance(cached_response, bytes | str):
+                if isinstance(cached_response, bytes):
+                    cached_response = cached_response.decode('utf-8')
+                cached_response = json.loads(cached_response)
+            logger.debug(f'Cache hit for key: {self._request_data.cache_key}')
+            return httpx.Response(
+                status_code=cached_response['status_code'],
+                headers=cached_response['headers'],
+                content=base64.b64decode(cached_response['content']),
+            )
+        logger.debug(f'Cache miss for key: {self._request_data.cache_key}')
+        return None
+
+    async def _get_response_from_service(self, url: str) -> httpx.Response:
+        response = await self._httpx_client.request(
+            self._request_data.method,
+            url,
+            headers=self._request_data.headers,
+            params=self._request_data.query_params,
+            content=self._request_data.raw_body,
+            follow_redirects=True,
+        )
+        if response.status_code != 200:
+            raise ApiProxyRequestError(
+                message=f'Failed to fetch data from `{url}`. Status code: {response.status_code}'
+            )
+
+        return response
+
+    async def proxy_static_file(self, service_name: str, path: str) -> httpx.Response:
+        service = await self._get_service(service_name)
+        if not service.front_config.static_host:
+            raise ProxyStaticFileError(message=f'Static host is not configured for service `{service.name}`.')
+        url = f'{service.front_config.static_host}/{path.lstrip("/")}'
+
+        logger.debug(f'Fetching static file from {url}')
+
+        static_response = await self._httpx_client.get(
+            url,
+            headers=self._request_data.headers,
+            params=self._request_data.query_params,
+        )
+
+        if static_response.status_code != 200:
+            raise ProxyStaticFileError(
+                message=f'Failed to fetch static file from `{url}`. Status code: {static_response.status_code}'
+            )
+
+        return static_response
+
+    async def _get_service(self, service_name: str) -> ServiceSchema:
         service_data = await self._dao.get(service_name)
 
         service = ServiceSchema(**service_data.get('data', {}))
@@ -58,153 +255,10 @@ class ProxyService:
         if not service.enabled:
             raise ServiceDisabledError(service.name)
 
-        instance = await self._choose_healthy_instance(service)
+        if not service.instances:
+            raise ServiceHasNoInstancesError(service.name)
 
-        url = f'http://{instance.host}:{instance.port}/{path.lstrip("/")}'
-        logger.debug(f'Using instance: {instance.host}, URL: {url}')
-
-        request_params = await self._get_request_params()
-
-        endpoint_config = await self._get_endpoint_config(instance, request_params['method'], path)
-        logger.debug(f'Using endpoint config: {endpoint_config}')
-        if not hasattr(self._request.state, 'user'):
-            user_id = 'anonymous'
-        else:
-            user_id = self._request.state.user.get('sub', 'anonymous')
-
-        cache_key = f'{user_id}:{service_name}:{path}:{request_params["method"]}:{request_params.get("params", "")!s}'
-        response_data = None
-
-        if endpoint_config.cache_ttl and self._cache:
-            response_data = await self._cache.get(cache_key)
-            if response_data:
-                if isinstance(response_data, bytes | str):
-                    if isinstance(response_data, bytes):
-                        response_data = response_data.decode('utf-8')
-                    response_data = json.loads(response_data)
-                logger.debug(f'Cache hit for key: {cache_key}')
-                return httpx.Response(
-                    status_code=response_data['status_code'],
-                    headers=response_data['headers'],
-                    content=base64.b64decode(response_data['content']),
-                )
-            logger.debug(f'Cache miss for key: {cache_key}, forwarding request')
-
-        if self._opa_client and endpoint_config.opa_config.policy and endpoint_config.opa_config.policy != 'public':
-            opa_response = await self._check_opa_policy(
-                endpoint_config.opa_config,
-                request_params['method'],
-                path,
-            )
-
-            logger.debug(f'OPA response: {opa_response}')
-
-            if not opa_response.get('allow', False):
-                raise NotEnoughPermissionsError(service_name=service.name, path=path)
-
-            request_params['headers']['X-OPA-Result'] = json.dumps(opa_response)
-            query_value = opa_response.get('query', '')
-            if isinstance(query_value, dict):
-                query_value = json.dumps(query_value)
-            request_params['params']['opa_query'] = query_value
-
-        resp = await self._httpx_client.request(
-            request_params['method'],
-            url,
-            headers=request_params['headers'],
-            params=request_params['params'],
-            content=request_params.get('content', None),
-        )
-
-        if endpoint_config.cache_ttl and self._cache and resp.status_code == 200:
-            logger.debug(f'Storing response in cache for key: {cache_key} with TTL: {endpoint_config.cache_ttl}')
-            await self._cache.set(
-                cache_key,
-                {
-                    'status_code': resp.status_code,
-                    'headers': dict(resp.headers),
-                    'content': base64.b64encode(resp.content).decode('ascii'),
-                },
-                ttl=endpoint_config.cache_ttl,
-            )
-
-        return resp
-
-    async def _check_opa_policy(self, opa_config: OPAConfig, method: str, path: str) -> dict:
-        """Check OPA policy for the given method and path."""
-        if not self._opa_client:
-            raise ProxyOpaClientInitializationError()
-
-        input_data = {
-            'request': {
-                'method': method.upper(),
-                'path': path.strip('/').split('/'),
-            },
-            'user': User(**self._request.state.user).model_dump(),
-        }
-
-        if opa_config.is_partial and opa_config.partial_query:
-            # For partial compile, we need to provide the query and unknowns
-            logger.debug('Partial OPA compile request')
-            response = await self._opa_client.compile(
-                package=opa_config.policy,
-                input=input_data,
-                unknowns=opa_config.unknowns or [],
-                partial_query=opa_config.partial_query,
-                query_filter_format=opa_config.query_filter_format,
-            )
-            return response
-
-        logger.debug('Full OPA check policy request')
-        # For full policy check, we just need to check the policy
-        try:
-            response = await self._opa_client.check_policy(
-                package=opa_config.policy,
-                input=input_data,
-            )
-            return response
-        except Exception as e:
-            logger.error(f'OPA policy check failed: {e}')
-            return {}
-
-    @staticmethod
-    def _path_to_regex(endpoint_path: str) -> re.Pattern:
-        regex = re.sub(r'{[^/]+}', r'[^/]+', endpoint_path.strip('/'))
-        return re.compile(f'^{regex}$')
-
-    async def _get_endpoint_config(self, instance: ServiceInstance, method: str, path: str) -> ServiceEndpoint:
-        """Get the endpoint configuration for a service."""
-        if not instance or not instance.endpoints:
-            return ServiceEndpoint(method=method, path=path)
-
-        request_path = path.strip('/')
-
-        for endpoint in instance.endpoints:
-            if endpoint.method.lower() == method.lower():
-                pattern = self._path_to_regex(endpoint.path)
-                if pattern.match(request_path):
-                    return endpoint
-
-        return ServiceEndpoint(method=method, path=path)
-
-    # TODO: Need to refactor this method to use a more structured way of handling request parameters
-    async def _get_request_params(self) -> dict:
-        method = self._request.method
-        headers = dict(self._request.headers)
-        params = dict(self._request.query_params)
-
-        headers.pop('host', None)
-        headers.pop('content-length', None)
-
-        kwargs: dict[str, dict | bytes] = {'headers': headers, 'params': params}
-
-        if method in ['POST', 'PUT', 'PATCH', 'DELETE']:
-            kwargs['content'] = await self._request.body()
-
-        return {
-            'method': method,
-            **kwargs,
-        }
+        return service
 
     async def _choose_healthy_instance(self, service: ServiceSchema) -> ServiceInstance:
         healthy_instances = [inst for inst in service.instances if inst.healthy]
@@ -216,40 +270,23 @@ class ProxyService:
 
         return await strategy.choose(service.name, healthy_instances)
 
-    async def proxy_static(
-        self,
-        service_name: str,
-        path: str,
-    ) -> httpx.Response:
-        """Proxy a static file request to a service frontend Nginx."""
+    @staticmethod
+    def _path_to_regex(endpoint_path: str) -> re.Pattern:
+        regex = re.sub(r'{[^/]+}', r'[^/]+', endpoint_path.strip('/'))
+        return re.compile(f'^{regex}$')
 
-        service_data = await self._dao.get(service_name)
-        service = ServiceSchema(**service_data.get('data', {}))
+    async def _get_endpoint(self, endpoints: list[ServiceEndpoint], path: str) -> ServiceEndpoint | None:
+        request_path = path.strip('/')
+        for endpoint in endpoints:
+            if endpoint.method.lower() == self._request_data.method.lower():
+                pattern = self._path_to_regex(endpoint.path)
+                if pattern.match(request_path):
+                    return endpoint
 
-        if not service.front_config.static_host:
-            raise ProxyStaticFileError(message=f'Static host is not configured for service `{service.name}`.')
-        url = f'{service.front_config.static_host}/{path.lstrip("/")}'
-        logger.debug(f'Proxy static to: {url}')
-        request_params = await self._get_request_params()
-        try:
-            resp = await self._httpx_client.request(
-                request_params['method'],
-                url,
-                headers=request_params['headers'],
-                params=request_params['params'],
-                content=request_params.get('content', None),
-            )
-
-            return httpx.Response(
-                status_code=resp.status_code,
-                headers=dict(resp.headers),
-                content=await resp.aread(),
-            )
-        except Exception as e:
-            raise ProxyStaticFileError(message=str(e)) from e
+        return None
 
 
-def get_proxy_service(
+async def get_proxy_service(
     request: Request,
     dao: Annotated[ServiceDAO, Depends(get_service_dao)],
     redis_client: Annotated[Redis, Depends(get_redis)],
@@ -258,7 +295,7 @@ def get_proxy_service(
     balancing_factory = balancing_strategy_factory(redis_client)
     cache = CustomRedisCache(redis_client=redis_client, namespace='gate_cache')
     opa_client = AsyncOpaClient(url=SETTINGS.opa_url, client=httpx_client)
-    return ProxyService(
+    return await ProxyService.create(
         request=request,
         dao=dao,
         balancing_factory=balancing_factory,
