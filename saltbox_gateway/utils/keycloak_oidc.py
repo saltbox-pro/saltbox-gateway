@@ -8,7 +8,7 @@ import jwt
 from fastapi import Request
 from pydantic import ValidationError
 
-from saltbox_gateway.config import SETTINGS, logger
+from saltbox_gateway.config import logger
 from saltbox_gateway.errors import (
     AuthorizationHeaderInvalidError,
     AuthorizationUrlError,
@@ -31,6 +31,7 @@ from saltbox_gateway.errors import (
 from saltbox_gateway.utils.httpx_client import HttpxClientSingletoneFactory
 from saltbox_gateway.utils.redis_cache import BaseCache, CustomRedisCache
 from saltbox_gateway.utils.redis_config import get_redis_connection
+from saltbox_sdk.config.keycloak_config import KC_SETTINGS
 
 request_context: ContextVar[Request] = ContextVar('request_context')
 
@@ -46,7 +47,7 @@ class KeycloakOIDC:
         cache: BaseCache | None = None,
     ) -> None:
         logger.debug('Initializing KeycloakOIDC instance.')
-        self._oidc_url = SETTINGS.keycloak_oidc_url
+        self._oidc_url = KC_SETTINGS.oidc_url
         self._httpx_client = httpx_client or httpx.AsyncClient()
         self._cache = cache
         self._issuer: str | None = None

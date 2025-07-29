@@ -9,8 +9,9 @@ from starlette.types import ASGIApp
 
 from saltbox_gateway.config import logger
 from saltbox_gateway.errors import KeycloakOIDCError
-from saltbox_gateway.schemas import ANONYMOUS_USER, User
+from saltbox_gateway.schemas import ANONYMOUS_USER
 from saltbox_gateway.utils.keycloak_oidc import KeycloakOIDCFactory
+from saltbox_sdk.db.schemas_base import User
 
 RequestResponseEndpoint = Callable[[Request], Awaitable[Response]]
 request_context: ContextVar[Request] = ContextVar('request_context')

@@ -7,32 +7,12 @@ from pydantic import (
     computed_field,
 )
 
-from saltbox_gateway.config import SETTINGS
+from saltbox_sdk.db.schemas_base import User
 from saltbox_sdk.discovery_client.schemas import ServiceFrontendConfig
 
 
 class AccessModel(BaseModel):
     roles: list[str] = Field(default=[])
-
-
-class User(BaseModel):
-    sub: str
-    resource_access: dict[str, AccessModel] | None = Field(default=None, exclude=True)
-    email_verified: bool
-    name: str
-    email: str
-
-    @computed_field  # type: ignore[prop-decorator]
-    @property
-    def roles(self) -> list[str]:
-        client_roles: list[str] = []
-        if self.resource_access:
-            try:
-                client_roles = self.resource_access[SETTINGS.keycloak_client].roles
-            except KeyError:
-                pass
-
-        return client_roles
 
 
 ANONYMOUS_USER = User(

@@ -22,31 +22,14 @@ class Settings(BaseSettings):
     redis_tls_verification: Literal['none', 'optional', 'required'] = 'required'
     redis_url: str = ''
     redis_username: str | None = None
-    keycloak_server_url: str = ''
-    keycloak_front_url: str = ''
-    keycloak_realm: str = ''
-    keycloak_client: str = ''
-    keycloak_client_secret: str = ''
     opa_url: str = ''
-    official_modules: list[str] = ['core', 'processing']
+    official_modules: list[str] = ['core', 'processing', 'scheduler']
     service_registration_ttl: int = 3600
     proxy_request_timeout: int = 10
     health_check_interval: int = 15
     health_check_timeout: int = 3
 
     model_config = SettingsConfigDict(env_file='.env')
-
-    @property
-    def keycloak_oidc_url(self) -> str:
-        return f'{self.keycloak_server_url}/realms/{self.keycloak_realm}/.well-known/openid-configuration'
-
-    @property
-    def keycloak_authorization_endpoint(self) -> str:
-        return f'{self.keycloak_front_url}/realms/{self.keycloak_realm}/protocol/openid-connect/auth'
-
-    @property
-    def keycloak_token_url(self) -> str:
-        return f'{self.keycloak_front_url}/realms/{self.keycloak_realm}/protocol/openid-connect/token'
 
     @property
     def redis_connection_kwargs(self) -> dict[str, Any]:

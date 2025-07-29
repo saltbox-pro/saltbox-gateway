@@ -17,12 +17,12 @@ from saltbox_gateway.errors import (
     ServiceDisabledError,
     ServiceHasNoHealthyInstancesError,
 )
-from saltbox_gateway.schemas import User
 from saltbox_gateway.utils.balancing_strategies import BalancingStrategy, balancing_strategy_factory
 from saltbox_gateway.utils.httpx_client import HttpxClientSingletoneFactory
 from saltbox_gateway.utils.opa_client import AsyncOpaClient
 from saltbox_gateway.utils.redis_cache import BaseCache, CustomRedisCache
 from saltbox_gateway.utils.redis_config import get_redis
+from saltbox_sdk.db.schemas_base import User
 from saltbox_sdk.discovery_client.schemas import OPAConfig, ServiceEndpoint, ServiceInstance, ServiceSchema
 
 

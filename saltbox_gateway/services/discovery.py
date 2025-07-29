@@ -17,6 +17,7 @@ from saltbox_gateway.schemas import (
 )
 from saltbox_gateway.utils.redis_config import get_redis
 from saltbox_gateway.utils.redis_locker import AsyncRedisLockerFactory
+from saltbox_sdk.config.keycloak_config import KC_SETTINGS
 from saltbox_sdk.discovery_client.schemas import (
     ProxyBalancingStrategy,
     ServiceInstance,
@@ -134,10 +135,10 @@ class DiscoveryService:
 
         config = DiscoveryServiceConfig(
             auth_config=KeycloakConfig(
-                authority=f'{SETTINGS.keycloak_front_url}/realms/{SETTINGS.keycloak_realm}',
-                client_id=SETTINGS.keycloak_client,
+                authority=f'{KC_SETTINGS.front_url}/realms/{KC_SETTINGS.realm}',
+                client_id=KC_SETTINGS.client,
                 redirect_uri=f'{SETTINGS.server_scheme}://{SETTINGS.server_outer_socket}',
-                client_secret=SETTINGS.keycloak_client_secret,
+                client_secret=KC_SETTINGS.client_secret,
             ),
             services=[service.front_config for service in services],
         )

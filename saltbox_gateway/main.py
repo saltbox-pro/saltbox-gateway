@@ -1,6 +1,7 @@
 import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from functools import partial
 from typing import Any
 
 from fastapi import FastAPI
@@ -16,9 +17,9 @@ from saltbox_gateway.routers.proxy_router import router as proxy_router
 from saltbox_gateway.routers.static_proxy_router import router as static_proxy_router
 from saltbox_gateway.services.health_checker import get_health_checker_service
 from saltbox_gateway.tmp_ws_proxy.router import ws_core_jobs_router, ws_core_tasks_router
-from saltbox_gateway.utils.custom_openapi import get_custom_openapi_schema
 from saltbox_gateway.utils.redis_cache import CustomRedisCache
 from saltbox_gateway.utils.redis_config import close_redis_pool, get_redis_connection
+from saltbox_sdk.utilities.custom_openapi import custom_openapi, patch_swagger_config
 
 
 @asynccontextmanager
@@ -52,19 +53,9 @@ app_config: dict[str, Any] = {
     'description': APP_DESC,
     'docs_url': '/api/discovery/docs',
     'openapi_url': '/api/discovery/openapi.json',
-    'swagger_ui_oauth2_redirect_url': '/api/discovery/docs/oauth2-redirect',
-    'redoc_url': None,
-    'swagger_ui_init_oauth': {
-        'clientId': SETTINGS.keycloak_client,
-        'clientSecret': SETTINGS.keycloak_client_secret,
-        'scopes': 'openid',
-    },
-    'swagger_ui_parameters': {
-        'displayRequestDuration': True,
-        'filter': True,
-    },
-    # 'root_path': SETTINGS.base_url_root_path,
 }
+
+app_config = patch_swagger_config(app_config)
 
 app = FastAPI(**app_config)
 
@@ -81,7 +72,7 @@ app.add_middleware(
     AuthMiddleware,
     # Need add SETTINGS.base_url_root_path.rstrip('/') + uri in some cases
     excluded_paths=[uri for uri in [app.docs_url, app.openapi_url, app.swagger_ui_oauth2_redirect_url] if uri]
-    + ['/api/core/docs', '/api/core/openapi.json']
+    + [rf'/api/{module}/(docs|openapi\.json|docs/oauth2-redirect)$' for module in SETTINGS.official_modules]
     + [r'/static/(.*)']
     + [r'/api/discovery(?:/.*)?$']
     + [r'/api/core/system/[\w-]+/authorized_keys'],
@@ -97,18 +88,4 @@ app.include_router(ws_core_jobs_router, include_in_schema=False)
 app.include_router(ws_core_tasks_router, include_in_schema=False)
 
 
-def custom_openapi() -> dict:
-    if app.openapi_schema:
-        return app.openapi_schema
-
-    logger.debug('Generating custom OpenAPI schema')
-
-    app.openapi_schema = get_custom_openapi_schema(
-        app_configs=app_config,
-        routes=app.routes,
-        # servers=[{'url': SETTINGS.base_url_root_path}],
-    )
-    return app.openapi_schema
-
-
-app.openapi = custom_openapi  # type: ignore[method-assign]
+app.openapi = partial(custom_openapi, app, app_config)  # type: ignore[method-assign]

@@ -16,8 +16,8 @@ from redis.asyncio.client import PubSub
 
 from saltbox_gateway.config import logger
 from saltbox_gateway.errors import KeycloakOIDCError
-from saltbox_gateway.schemas import User
 from saltbox_gateway.utils.keycloak_oidc import KeycloakOIDCFactory
+from saltbox_sdk.db.schemas_base import User
 
 
 class RedisPubSubMessage(TypedDict):
