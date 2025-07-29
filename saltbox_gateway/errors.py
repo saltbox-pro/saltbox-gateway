@@ -136,8 +136,10 @@ class ApiProxyRequestError(ProxyServiceError):
 
     status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
 
-    def __init__(self, message: str | None = None) -> None:
+    def __init__(self, status_code: int | None = None, message: str | None = None) -> None:
         self.detail = 'An error occurred while processing the API proxy request.'
+        if status_code:
+            self.status_code = status_code
         if message:
             self.detail += f' Details: {message}'
         super().__init__(self.detail)

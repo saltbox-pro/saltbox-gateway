@@ -234,7 +234,8 @@ class ProxyService:
         )
         if response.status_code != 200:
             raise ApiProxyRequestError(
-                message=f'Failed to fetch data from `{url}`. Status code: {response.status_code}'
+                status_code=response.status_code,
+                message=response.json().get('detail', 'Unknown error occurred while processing the request.'),
             )
 
         return response
