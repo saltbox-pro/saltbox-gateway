@@ -10,7 +10,9 @@ APP_DESC = 'Salt.Box Gateway and Service Discovery API'
 
 class Settings(BaseSettings):
     log_level: str = 'INFO'
-    base_url: str
+    server_outer_socket: str
+    server_ws_scheme: str = 'ws'
+    server_scheme: str = 'http'
     static_proxy_prefix: str = '/static'
     basic_auth_username: str = ''
     basic_auth_password: str = ''

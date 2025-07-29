@@ -45,12 +45,6 @@ class DiscoveryService:
 
         async with self._locker.create(key=service.name):
             try:
-                service_data = service.model_dump()
-                service_data_by_alias = service.model_dump(by_alias=True)
-                logger.debug(f'EP: {service_data.get("instances", [{}])[0].get("endpoints", [{}])[26]}')
-                logger.debug(
-                    f'EP (by alias): {service_data_by_alias.get("instances", [{}])[0].get("endpoints", [{}])[26]}'
-                )
                 created_data = await self._dao.create(service.model_dump())
             except ServiceAlreadyExistsError as e:
                 logger.debug(f'Service already exists: {e.service_name}\nTrying to update with new instances...')
@@ -142,7 +136,7 @@ class DiscoveryService:
             auth_config=KeycloakConfig(
                 authority=f'{SETTINGS.keycloak_front_url}/realms/{SETTINGS.keycloak_realm}',
                 client_id=SETTINGS.keycloak_client,
-                redirect_uri=SETTINGS.base_url.rstrip('/'),
+                redirect_uri=f'{SETTINGS.server_scheme}://{SETTINGS.server_outer_socket}',
                 client_secret=SETTINGS.keycloak_client_secret,
             ),
             services=[service.front_config for service in services],
