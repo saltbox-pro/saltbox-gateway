@@ -53,6 +53,7 @@ app_config: dict[str, Any] = {
     'description': APP_DESC,
     'docs_url': '/api/discovery/docs',
     'openapi_url': '/api/discovery/openapi.json',
+    'swagger_ui_oauth2_redirect_url': '/api/discovery/docs/oauth2-redirect',
 }
 
 app_config = patch_swagger_config(app_config)
