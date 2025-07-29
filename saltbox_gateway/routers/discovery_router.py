@@ -28,7 +28,7 @@ async def health_check(redis: RedisDependency) -> dict:
         raise DiscoveryServiceError() from None
 
 
-@router.get('/config')
+@router.get('/config', response_model_exclude={'services': {'__all__': {'static_host'}}})
 async def get_full_config(
     discovery_service: Annotated[DiscoveryService, Depends(get_discovery_service)],
 ) -> DiscoveryServiceConfig:
@@ -87,14 +87,14 @@ async def remove_instance(
     )
 
 
-@router.get('/services')
+@router.get('/services', response_model_by_alias=False)
 async def get_services(
     discovery_service: Annotated[DiscoveryService, Depends(get_discovery_service)],
 ) -> list[ServiceSchema]:
     return await discovery_service.get_all_services()
 
 
-@router.get('/services/{service_name}')
+@router.get('/services/{service_name}', response_model_by_alias=False)
 async def get_service_by_name(
     service_name: str,
     discovery_service: Annotated[DiscoveryService, Depends(get_discovery_service)],

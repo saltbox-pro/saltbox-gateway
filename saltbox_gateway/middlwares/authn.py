@@ -9,6 +9,7 @@ from starlette.types import ASGIApp
 
 from saltbox_gateway.config import logger
 from saltbox_gateway.errors import KeycloakOIDCError
+from saltbox_gateway.schemas import ANONYMOUS_USER, User
 from saltbox_gateway.utils.keycloak_oidc import KeycloakOIDCFactory
 
 RequestResponseEndpoint = Callable[[Request], Awaitable[Response]]
@@ -32,6 +33,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         logger.debug('Dispatching request: %s', request.url.path)
+        request.state.user = ANONYMOUS_USER
         if self.in_excludes(request.url.path) or request.method == 'OPTIONS':
             return await call_next(request)
 
@@ -39,9 +41,10 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
         try:
             decoded_token = await self._oidc.decode_jwt(token)
+            request.state.user = User(**decoded_token)
         except KeycloakOIDCError as e:
             return JSONResponse(status_code=e.status_code, content={'detail': e.detail})
-        request.state.user = decoded_token
+
         request_context.set(request)
         response = await call_next(request)
         return response

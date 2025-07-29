@@ -53,10 +53,8 @@ class HealthChecker:
     async def _check_service_instances(self, service: ServiceSchema) -> None:
         async def check_instance(instance: ServiceInstance) -> ServiceInstance:
             url = f'http://{instance.host}:{instance.port}{instance.health_check_path}'
-            logger.debug(f'Checking health on {url} for service {service.name}')
             try:
                 response = await self._httpx_client.get(url, timeout=SETTINGS.health_check_timeout)
-                logger.debug(f'HTTP {response.status_code}')
                 if response.status_code == 200:
                     instance.healthy = True
                     instance.last_check = instance.last_healthy = time.time()

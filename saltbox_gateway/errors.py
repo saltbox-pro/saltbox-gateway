@@ -131,7 +131,30 @@ class ServiceDisabledError(ProxyServiceError):
         super().__init__(self.detail)
 
 
-class NoHealthyInstanceError(ProxyServiceError):
+class ApiProxyRequestError(ProxyServiceError):
+    """Exception raised when there is an error processing the API proxy request."""
+
+    status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+
+    def __init__(self, message: str | None = None) -> None:
+        self.detail = 'An error occurred while processing the API proxy request.'
+        if message:
+            self.detail += f' Details: {message}'
+        super().__init__(self.detail)
+
+
+class ServiceHasNoInstancesError(ProxyServiceError):
+    """Exception raised when a service has no instances available."""
+
+    status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+
+    def __init__(self, service_name: str) -> None:
+        self.service_name = service_name
+        self.detail = f'Service "{service_name}" has no instances available.'
+        super().__init__(self.detail)
+
+
+class ServiceHasNoHealthyInstancesError(ProxyServiceError):
     """Exception raised when no healthy instance is found for a service."""
 
     status_code = status.HTTP_503_SERVICE_UNAVAILABLE
@@ -166,6 +189,29 @@ class ProxyStaticFileError(ProxyServiceError):
         self.detail = 'An error occurred while proxying the static file.'
         if message:
             self.detail = self.detail + f' Details: {message}'
+        super().__init__(self.detail)
+
+
+class ServiceHasNoEndpointsError(ProxyServiceError):
+    """Exception raised when a service has no endpoints defined."""
+
+    status_code = status.HTTP_404_NOT_FOUND
+
+    def __init__(self, service_name: str) -> None:
+        self.service_name = service_name
+        self.detail = f'Service "{service_name}" has no endpoints defined.'
+        super().__init__(self.detail)
+
+
+class ServiceEndpointNotFoundError(ProxyServiceError):
+    """Exception raised when a service endpoint is not found."""
+
+    status_code = status.HTTP_404_NOT_FOUND
+
+    def __init__(self, service_name: str, endpoint: str) -> None:
+        self.service_name = service_name
+        self.endpoint = endpoint
+        self.detail = f'Endpoint "{endpoint}" not found in service "{service_name}".'
         super().__init__(self.detail)
 
 

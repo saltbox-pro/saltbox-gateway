@@ -1,5 +1,8 @@
+from typing import Any
+
 from pydantic import (
     BaseModel,
+    ConfigDict,
     Field,
     computed_field,
 )
@@ -32,28 +35,46 @@ class User(BaseModel):
         return client_roles
 
 
+ANONYMOUS_USER = User(
+    sub='anonymous',
+    resource_access=None,
+    email_verified=False,
+    name='Anonymous',
+    email='anonymous@localhost',
+)
+
+
 class KeycloakConfig(BaseModel):
     authority: str
     client_id: str
     redirect_uri: str
     client_secret: str | None = None
 
-    @computed_field  # type: ignore[prop-decorator]
-    @property
-    def keycloak_oidc_url(self) -> str:
-        return f'{self.authority}/.well-known/openid-configuration'
-
-    @computed_field  # type: ignore[prop-decorator]
-    @property
-    def keycloak_authorization_endpoint(self) -> str:
-        return f'{self.authority}/protocol/openid-connect/auth'
-
 
 class DiscoveryServiceConfig(BaseModel):
     auth_config: KeycloakConfig
     services: list[ServiceFrontendConfig]
 
+
+class ProxyRequestData(BaseModel):
+    method: str
+    path: str
+    query_params: dict[str, Any]
+    headers: dict[str, Any]
+    body: dict | None = None
+    raw_body: bytes | None = None
+    user: User
+
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+
     @computed_field  # type: ignore[prop-decorator]
     @property
-    def keycloak_url(self) -> str:
-        return SETTINGS.keycloak_front_url.rstrip('/')
+    def cache_key(self) -> str:
+        return f'{self.user.sub}:{self.method}:{self.path}:{self.query_params}'
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def is_cachable(self) -> bool:
+        return self.method in ['GET', 'HEAD'] and self.user.sub != ANONYMOUS_USER.sub

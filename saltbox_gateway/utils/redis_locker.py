@@ -22,7 +22,6 @@ class AsyncRedisLocker:
         attempts = 0
         while attempts < self._max_attempts:
             if await self._redis.set(self._key, self._value, ex=self._ttl, nx=True):
-                logger.debug(f'Lock acquired with attempt #{attempts + 1}: {self._key} ({self._value})')
                 return True
             await asyncio.sleep(0.1)
             attempts += 1
@@ -41,7 +40,7 @@ class AsyncRedisLocker:
         """
         released = await self._redis.eval(script, 1, self._key, self._value)  # type: ignore[no-untyped-call]
         if released:
-            logger.debug(f'Lock released for: {self._key} ({self._value})')
+            pass
         else:
             logger.warning(f'Lock release failed or lock not held: {self._key}')
 

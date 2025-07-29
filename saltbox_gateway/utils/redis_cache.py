@@ -47,6 +47,11 @@ class CustomRedisCache(BaseCache):
     @classmethod
     async def clear_cache(cls, redis: Redis, namespace: str | None = None) -> None:
         """Clear the cache for the given namespace or all namespaces."""
+        # Also clear balance:* keys (used by balancing strategies)
+        balance_keys = await redis.keys('balance:*')
+        if balance_keys:
+            await redis.delete(*balance_keys)
+            logger.debug('Balance keys cleared')
         if namespace:
             keys = await redis.keys(f'cache:{namespace}:*')
         else:

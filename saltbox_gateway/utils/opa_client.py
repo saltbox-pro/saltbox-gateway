@@ -2,6 +2,7 @@ from typing import Any
 
 from httpx import AsyncClient
 
+# from pydantic import BaseModel
 from saltbox_gateway.config import SETTINGS, logger
 from saltbox_gateway.errors import OpaRequestError, OpaResponseFormatError
 from saltbox_gateway.utils.httpx_client import HttpxClientSingletoneFactory
@@ -11,6 +12,14 @@ from saltbox_gateway.utils.rego.sql_visitor import SQLQueryVisitor
 from saltbox_sdk.discovery_client.schemas import OPAQueryFilterFormat
 
 type Decision = dict[str, Any]
+
+
+# class CheckAccessInput(BaseModel):
+#     """Base model for check access input data."""
+#     object: AccessObject
+#     subject: AccessSubject
+#     request: ReqestObject
+#     environment: dict[str, Any] | None = None
 
 
 class AsyncOpaClient:
@@ -48,8 +57,32 @@ class AsyncOpaClient:
             self._is_tmp_client = True
         self.base_url = f'{url}/{self.version}'
 
+    async def check_access(
+        self,
+        package: str,
+        input: dict,
+        *,
+        is_partial: bool = False,
+        unknowns: list[str] | None = None,
+        query_filter_format: OPAQueryFilterFormat | None = None,
+        partial_query: str = '',
+    ) -> Decision:
+        if is_partial:
+            return await self.compile(
+                package=package,
+                input=input,
+                unknowns=unknowns or [],
+                query_filter_format=query_filter_format or OPAQueryFilterFormat.MONGO,
+                partial_query=partial_query or 'allow == true',
+            )
+
+        return await self.check_policy(
+            package=package,
+            input=input,
+        )
+
     async def check_policy(self, package: str, input: dict) -> Decision:
-        url = f'{self.base_url}/data/{package}'
+        url = f'{self.base_url}/data/{package.replace(".", "/")}'
         data = {
             'input': input,
         }
@@ -97,9 +130,9 @@ class AsyncOpaClient:
         queries: list = response.json().get('result', {}).get('queries', [])
 
         if len(queries) == 0:
-            return {'result': False, 'queries': None}
+            return {'allow': False, 'query': None}
         if any(len(x) == 0 for x in queries):
-            return {'result': True, 'queries': None}
+            return {'allow': True, 'query': None}
 
         query_set = ast.QuerySet.from_data(queries)
 
@@ -119,7 +152,7 @@ class AsyncOpaClient:
         query = visitor.visit(query_set)
         logger.debug('Mongo query: %s', query)
 
-        return {'result': True, 'query': query}
+        return {'allow': True, 'query': query}
 
     async def _compile_to_sql(self, query_set: ast.QuerySet) -> dict:
         """Compile a query to SQL."""
@@ -129,7 +162,7 @@ class AsyncOpaClient:
         query = sql.build_sql_query(select='collections.*', from_table='collections', clauses=clauses)
         logger.debug('SQL query: %s', query)
 
-        return {'result': True, 'query': query}
+        return {'allow': True, 'query': query}
 
 
 def get_opa_client() -> AsyncOpaClient:

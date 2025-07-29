@@ -11,11 +11,11 @@ from redis.asyncio import Redis
 from saltbox_gateway.config import SETTINGS, logger
 from saltbox_gateway.dao.service_dao import ServiceDAO, get_service_dao
 from saltbox_gateway.errors import (
-    NoHealthyInstanceError,
     NotEnoughPermissionsError,
     ProxyOpaClientInitializationError,
     ProxyStaticFileError,
     ServiceDisabledError,
+    ServiceHasNoHealthyInstancesError,
 )
 from saltbox_gateway.schemas import User
 from saltbox_gateway.utils.balancing_strategies import BalancingStrategy, balancing_strategy_factory
@@ -99,7 +99,7 @@ class ProxyService:
 
             logger.debug(f'OPA response: {opa_response}')
 
-            if not opa_response.get('result', False):
+            if not opa_response.get('allow', False):
                 raise NotEnoughPermissionsError(service_name=service.name, path=path)
 
             request_params['headers']['X-OPA-Result'] = json.dumps(opa_response)
@@ -210,7 +210,7 @@ class ProxyService:
         healthy_instances = [inst for inst in service.instances if inst.healthy]
 
         if not healthy_instances:
-            raise NoHealthyInstanceError(service.name)
+            raise ServiceHasNoHealthyInstancesError(service.name)
 
         strategy = self._balancing_factory(service.load_balancing_strategy)
 
