@@ -96,7 +96,20 @@ class ProxyService:
         endpoint = await self._get_endpoint(service_instance.endpoints, path)
 
         if not endpoint:
-            raise ServiceEndpointNotFoundError(service.name, path)
+            logger.debug(f'No endpoint found for service: {service_name}, path: {path}')
+            if path.startswith('docs') or path.startswith('openapi'):
+                endpoint = ServiceEndpoint(
+                    path=path,
+                    method=self._request_data.method,
+                    opa_config=OPAConfig(
+                        policy='public',
+                        is_partial=False,
+                        query_filter_format=None,
+                    ),
+                    cache_ttl=0,  # Disable caching for docs
+                )
+            else:
+                raise ServiceEndpointNotFoundError(service.name, path)
 
         url = f'http://{service_instance.host}:{service_instance.port}/{path.lstrip("/")}'
 
