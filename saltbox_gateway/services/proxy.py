@@ -58,15 +58,15 @@ class ProxyService:
         cache: BaseCache | None = None,
     ) -> 'ProxyService':
         """Asynchronous factory method to create a ProxyService instance."""
-        raw_body = None
-        body = None
+
         if request.method in ['POST', 'PUT', 'PATCH', 'DELETE']:
-            try:
-                raw_body = await request.body()
-                body = json.loads(raw_body)
-            except Exception:
-                raw_body = None
-                body = None
+            raw_body = await request.body()
+            body = None
+            if request.headers.get('content-type', '').startswith('application/json'):
+                try:
+                    body = json.loads(raw_body)
+                except Exception:
+                    body = None
         request_data = ProxyRequestData(
             method=request.method.upper(),
             path=request.url.path.strip('/'),
