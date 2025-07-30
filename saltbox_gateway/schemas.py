@@ -1,9 +1,10 @@
-from typing import Any
+from typing import Annotated, Any
 
 from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    StringConstraints,
     computed_field,
 )
 
@@ -37,11 +38,11 @@ class DiscoveryServiceConfig(BaseModel):
 
 
 class ProxyRequestData(BaseModel):
-    method: str
-    path: str
+    method: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+    path: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
     query_params: dict[str, Any]
-    headers: dict[str, Any]
-    body: dict | None = None
+    headers: dict[str, str]
+    body: Any = None  # any JSON-valid object
     raw_body: bytes | None = None
     user: User
 
