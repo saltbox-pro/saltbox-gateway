@@ -233,10 +233,16 @@ class ProxyService:
             content=self._request_data.raw_body,
             follow_redirects=True,
         )
-        if response.status_code != 200:
+        if not response.is_success:
+            detail = 'Unknown error occurred while processing the request.'
+            if response.content and response.headers.get('content-type', '').startswith('application/json'):
+                try:
+                    detail = response.json().get('detail', detail)
+                except Exception as e:
+                    logger.warning(f'Ошибка парсинга JSON из ответа сервиса: {e}')
             raise ApiProxyRequestError(
                 status_code=response.status_code,
-                message=response.json().get('detail', 'Unknown error occurred while processing the request.'),
+                message=detail,
             )
 
         return response
