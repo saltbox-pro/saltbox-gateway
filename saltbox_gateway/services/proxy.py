@@ -58,7 +58,8 @@ class ProxyService:
         cache: BaseCache | None = None,
     ) -> 'ProxyService':
         """Asynchronous factory method to create a ProxyService instance."""
-
+        raw_body = None
+        body = None
         if request.method in ['POST', 'PUT', 'PATCH', 'DELETE']:
             raw_body = await request.body()
             body = None
