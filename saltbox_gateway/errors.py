@@ -1,7 +1,9 @@
 from fastapi import WebSocketException, status
 
+from saltbox_sdk.fastapi_utils.errors import SaltBoxBaseError
 
-class GatewayError(Exception):
+
+class GatewayError(SaltBoxBaseError):
     """Base class for all gateway-related exceptions."""
 
     status_code = status.HTTP_500_INTERNAL_SERVER_ERROR

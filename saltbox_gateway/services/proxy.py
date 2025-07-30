@@ -224,11 +224,22 @@ class ProxyService:
         logger.debug(f'Cache miss for key: {self._request_data.cache_key}')
         return None
 
+    def _build_proxy_headers(self) -> dict:
+        headers = self._request_data.headers.copy()
+        user = self._request_data.user
+        headers['X-User-Id'] = str(user.sub)
+        headers['X-User-Email'] = user.email
+        headers['X-User-Email-Verified'] = str(user.email_verified)
+        headers['X-User-Name'] = user.name
+
+        return headers
+
     async def _get_response_from_service(self, url: str) -> httpx.Response:
+        headers = self._build_proxy_headers()
         response = await self._httpx_client.request(
             self._request_data.method,
             url,
-            headers=self._request_data.headers,
+            headers=headers,
             params=self._request_data.query_params,
             content=self._request_data.raw_body,
             follow_redirects=True,

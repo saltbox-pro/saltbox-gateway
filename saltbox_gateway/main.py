@@ -10,7 +10,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from saltbox_gateway import __version__
 from saltbox_gateway.config import APP_DESC, APP_NAME, SETTINGS, logger
 from saltbox_gateway.errors import GatewayError
-from saltbox_gateway.exception_handlers import custom_http_handler
 from saltbox_gateway.middlwares.authn import AuthMiddleware
 from saltbox_gateway.routers.discovery_router import router as discovery_router
 from saltbox_gateway.routers.proxy_router import router as proxy_router
@@ -19,7 +18,8 @@ from saltbox_gateway.services.health_checker import get_health_checker_service
 from saltbox_gateway.tmp_ws_proxy.router import ws_core_jobs_router, ws_core_tasks_router
 from saltbox_gateway.utils.redis_cache import CustomRedisCache
 from saltbox_gateway.utils.redis_config import close_redis_pool, get_redis_connection
-from saltbox_sdk.utilities.custom_openapi import custom_openapi, patch_swagger_config
+from saltbox_sdk.fastapi_utils.custom_openapi import custom_openapi, patch_swagger_config
+from saltbox_sdk.fastapi_utils.exception_handlers import custom_http_handler
 
 
 @asynccontextmanager

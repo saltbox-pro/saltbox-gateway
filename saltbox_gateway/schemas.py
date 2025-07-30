@@ -3,26 +3,12 @@ from typing import Annotated, Any
 from pydantic import (
     BaseModel,
     ConfigDict,
-    Field,
     StringConstraints,
     computed_field,
 )
 
-from saltbox_sdk.db.schemas_base import User
+from saltbox_sdk.db.schemas_base import ANONYMOUS_USER, User
 from saltbox_sdk.discovery_client.schemas import ServiceFrontendConfig
-
-
-class AccessModel(BaseModel):
-    roles: list[str] = Field(default=[])
-
-
-ANONYMOUS_USER = User(
-    sub='anonymous',
-    resource_access=None,
-    email_verified=False,
-    name='Anonymous',
-    email='anonymous@localhost',
-)
 
 
 class KeycloakConfig(BaseModel):
