@@ -60,19 +60,28 @@ class ProxyService:
         """Asynchronous factory method to create a ProxyService instance."""
         raw_body = None
         body = None
+        headers = dict(request.headers)
+
+        # Body is only sent for methods that typically include a body
         if request.method in ['POST', 'PUT', 'PATCH', 'DELETE']:
             raw_body = await request.body()
             body = None
-            if request.headers.get('content-type', '').startswith('application/json'):
+            if headers.get('content-type', '').startswith('application/json'):
                 try:
                     body = json.loads(raw_body)
                 except Exception:
                     body = None
+        else:
+            raw_body = None
+            body = None
+            headers.pop('content-type', None)
+            headers.pop('content-length', None)
+
         request_data = ProxyRequestData(
             method=request.method.upper(),
             path=request.url.path.strip('/'),
             query_params=dict(request.query_params),
-            headers=dict(request.headers),
+            headers=headers,
             body=body,
             raw_body=raw_body,
             user=request.state.user,
@@ -112,7 +121,7 @@ class ProxyService:
             else:
                 raise ServiceEndpointNotFoundException(service.name, path)
 
-        url = f'http://{service_instance.host}:{service_instance.port}/{path.lstrip("/")}'
+        url = f'http://{service_instance.host}:{service_instance.port}/{path.strip("/")}'
 
         # TODO: refactor cache conditions
         if endpoint.cache_ttl > 0:
