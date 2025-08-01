@@ -10,12 +10,12 @@ from redis.asyncio import Redis
 
 from saltbox_gateway.config import SETTINGS, logger
 from saltbox_gateway.dao.service_dao import ServiceDAO, get_service_dao
-from saltbox_gateway.errors import (
-    NotEnoughPermissionsError,
-    ProxyOpaClientInitializationError,
-    ProxyStaticFileError,
-    ServiceDisabledError,
-    ServiceHasNoHealthyInstancesError,
+from saltbox_gateway.exceptions import (
+    NotEnoughPermissionsException,
+    ProxyOpaClientInitException,
+    ProxyStaticFileException,
+    ServiceDisabledException,
+    ServiceHasNoHealthyInstancesException,
 )
 from saltbox_gateway.utils.balancing_strategies import BalancingStrategy, balancing_strategy_factory
 from saltbox_gateway.utils.httpx_client import HttpxClientSingletoneFactory
@@ -56,7 +56,7 @@ class ProxyService:
         service = ServiceSchema(**service_data.get('data', {}))
 
         if not service.enabled:
-            raise ServiceDisabledError(service.name)
+            raise ServiceDisabledException(service.name)
 
         instance = await self._choose_healthy_instance(service)
 
@@ -100,7 +100,7 @@ class ProxyService:
             logger.debug(f'OPA response: {opa_response}')
 
             if not opa_response.get('allow', False):
-                raise NotEnoughPermissionsError(service_name=service.name, path=path)
+                raise NotEnoughPermissionsException(service_name=service.name, path=path)
 
             request_params['headers']['X-OPA-Result'] = json.dumps(opa_response)
             query_value = opa_response.get('query', '')
@@ -133,7 +133,7 @@ class ProxyService:
     async def _check_opa_policy(self, opa_config: OPAConfig, method: str, path: str) -> dict:
         """Check OPA policy for the given method and path."""
         if not self._opa_client:
-            raise ProxyOpaClientInitializationError()
+            raise ProxyOpaClientInitException()
 
         input_data = {
             'request': {
@@ -210,7 +210,7 @@ class ProxyService:
         healthy_instances = [inst for inst in service.instances if inst.healthy]
 
         if not healthy_instances:
-            raise ServiceHasNoHealthyInstancesError(service.name)
+            raise ServiceHasNoHealthyInstancesException(service.name)
 
         strategy = self._balancing_factory(service.load_balancing_strategy)
 
@@ -227,7 +227,8 @@ class ProxyService:
         service = ServiceSchema(**service_data.get('data', {}))
 
         if not service.front_config.static_host:
-            raise ProxyStaticFileError(message=f'Static host is not configured for service `{service.name}`.')
+            msg = f'Static host is not configured for service `{service.name}`.'
+            raise ProxyStaticFileException(msg)
         url = f'{service.front_config.static_host}/{path.lstrip("/")}'
         logger.debug(f'Proxy static to: {url}')
         request_params = await self._get_request_params()
@@ -246,7 +247,7 @@ class ProxyService:
                 content=await resp.aread(),
             )
         except Exception as e:
-            raise ProxyStaticFileError(message=str(e)) from e
+            raise ProxyStaticFileException(str(e)) from e
 
 
 def get_proxy_service(

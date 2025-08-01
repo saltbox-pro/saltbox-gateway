@@ -5,11 +5,11 @@ from redis.asyncio import Redis
 
 from saltbox_gateway.config import SETTINGS, logger
 from saltbox_gateway.dao.service_dao import ServiceDAO, get_service_dao
-from saltbox_gateway.errors import (
-    ServiceAlreadyExistsError,
-    ServiceInstanceNotFoundError,
-    ServiceIsNotOfficial,
-    ServiceNotFoundError,
+from saltbox_gateway.exceptions import (
+    NonOfficialServiceException,
+    ServiceAlreadyExistsException,
+    ServiceInstanceNotFoundException,
+    ServiceNotFoundException,
 )
 from saltbox_gateway.schemas import (
     DiscoveryServiceConfig,
@@ -40,14 +40,14 @@ class DiscoveryService:
     async def process(self, service: ServiceSchema) -> ServiceSchema:
         if service.type == ServiceType.OFFICIAL:
             if service.name not in SETTINGS.official_modules:
-                raise ServiceIsNotOfficial(service.name)
+                raise NonOfficialServiceException(service.name)
 
         logger.debug(f'Try to register service: {service.name}')
 
         async with self._locker.create(key=service.name):
             try:
                 created_data = await self._dao.create(service.model_dump())
-            except ServiceAlreadyExistsError as e:
+            except ServiceAlreadyExistsException as e:
                 logger.debug(f'Service already exists: {e.service_name}\nTrying to update with new instances...')
                 existing_service_data = await self._dao.get(service.name)
 
@@ -85,7 +85,7 @@ class DiscoveryService:
             updated_instances = [inst for inst in instances if not (inst['id'] == id)]
 
             if len(updated_instances) == len(instances):
-                raise ServiceInstanceNotFoundError(service_name=service_name, instance_id=id)
+                raise ServiceInstanceNotFoundException(service_name=service_name, instance_id=id)
 
             updated_service = service_data.get('data', {})
             updated_service['instances'] = updated_instances
@@ -111,7 +111,7 @@ class DiscoveryService:
             service = await self.get_service_by_name(service_name)
 
             if not service:
-                raise ServiceNotFoundError(service_name)
+                raise ServiceNotFoundException(service_name)
 
             updated_data = service.model_copy(update={'enabled': enable})
             updated_service = await self._dao.update(updated_data.model_dump())

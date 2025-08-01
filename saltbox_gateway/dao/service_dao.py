@@ -6,14 +6,14 @@ from fastapi.params import Depends
 from redis.asyncio import Redis
 
 from saltbox_gateway.config import SETTINGS
-from saltbox_gateway.errors import (
-    ServiceAlreadyExistsError,
-    ServiceCreationError,
-    ServiceDAOError,
-    ServiceDeletionError,
-    ServiceNameIsRequiredError,
-    ServiceNotFoundError,
-    ServiceUpdateError,
+from saltbox_gateway.exceptions import (
+    ServiceAlreadyExistsException,
+    ServiceCreationException,
+    ServiceDAOException,
+    ServiceDeleteException,
+    ServiceNameRequiredException,
+    ServiceNotFoundException,
+    ServiceUpdateException,
 )
 from saltbox_gateway.utils.redis_config import get_redis
 
@@ -30,27 +30,27 @@ class ServiceDAO:
                 decoded['data'] = json.loads(decoded['data'])
             except Exception as e:
                 msg = f'Failed to decode service data: {e}'
-                raise ServiceDAOError(msg) from e
+                raise ServiceDAOException(msg) from e
         if 'last_updated' in decoded:
             try:
                 decoded['last_updated'] = float(decoded['last_updated'])
             except ValueError as e:
                 msg = f'Invalid last_updated timestamp: {e}'
-                raise ServiceDAOError(msg) from e
+                raise ServiceDAOException(msg) from e
         return decoded
 
     async def get(self, service_name: str) -> dict:
         service_key = f'{self._key_prefix}:{service_name}'
         service_data = await self.redis_client.hgetall(service_key)
         if not service_data:
-            raise ServiceNotFoundError(service_name)
+            raise ServiceNotFoundException(service_name)
 
         return self._decode_redis_hash(service_data)
 
     async def get_or_none(self, service_name: str) -> dict | None:
         try:
             return await self.get(service_name)
-        except ServiceNotFoundError:
+        except ServiceNotFoundException:
             return None
 
     async def list(self) -> list[dict]:
@@ -66,37 +66,37 @@ class ServiceDAO:
         created_service = await self._save(service_data, must_exist=False)
 
         if not created_service:
-            raise ServiceCreationError(service_data.get('name', 'Unknown service'))
+            raise ServiceCreationException(service_data.get('name', 'Unknown service'))
         return created_service
 
     async def update(self, service_data: dict) -> dict:
         updated_service = await self._save(service_data, must_exist=True)
 
         if not updated_service:
-            raise ServiceUpdateError(service_data.get('name', 'Unknown service'))
+            raise ServiceUpdateException(service_data.get('name', 'Unknown service'))
         return updated_service
 
     async def delete(self, service_name: str) -> None:
         service_key = f'{self._key_prefix}:{service_name}'
         if not await self.redis_client.exists(service_key):
-            raise ServiceNotFoundError(service_name)
+            raise ServiceNotFoundException(service_name)
         result = await self.redis_client.delete(service_key)
         if result == 0:
-            raise ServiceDeletionError(service_name)
+            raise ServiceDeleteException(service_name)
 
         return None
 
     async def _save(self, service_data: dict, must_exist: bool) -> dict | None:
         service_name = service_data.get('name')
         if not service_name:
-            raise ServiceNameIsRequiredError()
+            raise ServiceNameRequiredException()
 
         service_key = f'{self._key_prefix}:{service_name}'
         exists = await self.redis_client.exists(service_key)
         if must_exist and not exists:
-            raise ServiceNotFoundError(service_name)
+            raise ServiceNotFoundException(service_name)
         if not must_exist and exists:
-            raise ServiceAlreadyExistsError(service_name)
+            raise ServiceAlreadyExistsException(service_name)
 
         await self.redis_client.hset(
             service_key, mapping={'data': json.dumps(service_data), 'last_updated': time.time()}

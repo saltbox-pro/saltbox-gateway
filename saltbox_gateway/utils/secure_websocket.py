@@ -15,7 +15,7 @@ from redis.asyncio import Redis
 from redis.asyncio.client import PubSub
 
 from saltbox_gateway.config import logger
-from saltbox_gateway.errors import KeycloakOIDCError
+from saltbox_gateway.exceptions import KeycloakOIDCException
 from saltbox_gateway.utils.keycloak_oidc import KeycloakOIDCFactory
 from saltbox_sdk.db.schemas_base import User
 
@@ -131,7 +131,7 @@ class AuthenticatedWebSocket:
             self.user = User(**payload)
             exp = cast(float, payload.get('exp'))
             self.token_expiration = datetime.datetime.fromtimestamp(exp, datetime.UTC)
-        except KeycloakOIDCError as e:
+        except KeycloakOIDCException as e:
             logger.error('Error processing token message %s', e)
             await self.close(f'Invalid token message: {e!s}')
 

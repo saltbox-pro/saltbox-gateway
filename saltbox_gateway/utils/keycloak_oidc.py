@@ -9,24 +9,24 @@ from fastapi import Request
 from pydantic import ValidationError
 
 from saltbox_gateway.config import logger
-from saltbox_gateway.errors import (
-    AuthorizationHeaderInvalidError,
-    AuthorizationUrlError,
-    IssuerError,
-    JWKSFetchError,
-    JWKSFetchTimeoutError,
-    JWKSKeyNotFoundError,
-    JWKSUriNotFoundError,
-    JWTDecodeHeaderError,
-    JWTExpiredError,
-    JWTInvalidTokenError,
-    JWTKidNotFoundError,
-    JWTValidationError,
-    KeycloakOIDCError,
-    OIDCConfigFetchError,
-    OIDCConfigTimeoutError,
-    OIDCConfigUnexpectedError,
-    TokenUrlError,
+from saltbox_gateway.exceptions import (
+    AuthorizationHeaderInvalidException,
+    AuthorizationUrlException,
+    IssuerException,
+    JWKSFetchException,
+    JWKSFetchTimeoutException,
+    JWKSKeyNotFoundException,
+    JWKSUriNotFoundException,
+    JWTDecodeHeaderException,
+    JWTExpiredException,
+    JWTInvalidTokenException,
+    JWTKidNotFoundException,
+    JWTValidationException,
+    KeycloakOIDCException,
+    OIDCConfigFetchException,
+    OIDCConfigTimeoutException,
+    OIDCConfigUnexpectedException,
+    TokenUrlException,
 )
 from saltbox_gateway.utils.httpx_client import HttpxClientSingletoneFactory
 from saltbox_gateway.utils.redis_cache import BaseCache, CustomRedisCache
@@ -59,14 +59,14 @@ class KeycloakOIDC:
     @property
     def authorization_endpoint(self) -> str:
         if not self._authorization_endpoint:
-            raise AuthorizationUrlError()
+            raise AuthorizationUrlException()
 
         return self._authorization_endpoint
 
     @property
     def token_url(self) -> str:
         if not self._token_url:
-            raise TokenUrlError()
+            raise TokenUrlException()
 
         return self._token_url
 
@@ -90,7 +90,7 @@ class KeycloakOIDC:
             oidc_config = response.json()
             self._issuer = oidc_config.get('issuer')
             if not self._issuer:
-                raise IssuerError()
+                raise IssuerException()
 
             self._algorithms = oidc_config.get('id_token_signing_alg_values_supported', self._algorithms)
 
@@ -101,13 +101,13 @@ class KeycloakOIDC:
             return cast(dict, oidc_config)
         except httpx.HTTPStatusError as e:
             logger.exception('Error fetching OIDC config: %s', e)
-            raise OIDCConfigFetchError() from None
+            raise OIDCConfigFetchException() from None
         except httpx.ReadTimeout as e:
             logger.exception('Timeout error fetching OIDC config: %s', e)
-            raise OIDCConfigTimeoutError() from None
+            raise OIDCConfigTimeoutException() from None
         except Exception as e:
             logger.error('Unexpected error fetching OIDC config: %s', e)
-            raise OIDCConfigUnexpectedError() from None
+            raise OIDCConfigUnexpectedException() from None
 
     async def _get_key_by_kid(self, token_kid: str) -> jwt.PyJWK:
         """Get the public key by KID from the JWKS and cache it.
@@ -127,7 +127,7 @@ class KeycloakOIDC:
         jwks = await self._get_jwks()
         public_keys = {key['kid']: key for key in jwks['keys']}
         if token_kid not in public_keys:
-            raise JWKSKeyNotFoundError()
+            raise JWKSKeyNotFoundException()
 
         if self._cache:
             await self._cache.set(token_kid, json.dumps(public_keys[token_kid]), 3600)
@@ -143,7 +143,7 @@ class KeycloakOIDC:
         oidc_config = await self._get_oidc_config()
         jwks_uri = oidc_config.get('jwks_uri')
         if not jwks_uri:
-            raise JWKSUriNotFoundError()
+            raise JWKSUriNotFoundException()
 
         if self._cache:
             cached_jwks = await self._cache.get(jwks_uri)
@@ -164,10 +164,10 @@ class KeycloakOIDC:
             return cast(dict[str, Any], jwks)
         except httpx.HTTPStatusError as e:
             logger.exception('Error fetching JWKS: %s', e)
-            raise JWKSFetchError() from None
+            raise JWKSFetchException() from None
         except httpx.ReadTimeout as e:
             logger.exception('Timeout error fetching JWKS: %s', e)
-            raise JWKSFetchTimeoutError() from None
+            raise JWKSFetchTimeoutException() from None
 
     async def decode_jwt(self, token: str | None) -> dict[str, str | list[str]]:  # noqa: C901
         """Decode the JWT token and verify its signature.
@@ -180,7 +180,7 @@ class KeycloakOIDC:
             KeycloakOIDCError: If the token is invalid or expired.
         """
         if not token or not token.startswith('Bearer '):
-            raise AuthorizationHeaderInvalidError()
+            raise AuthorizationHeaderInvalidException()
         token = token.removeprefix('Bearer').strip()
 
         if self._cache:
@@ -193,10 +193,10 @@ class KeycloakOIDC:
             unverified_header = jwt.get_unverified_header(token)
         except jwt.DecodeError as e:
             logger.exception('Decode error for JWT token header: %s', e)
-            raise JWTDecodeHeaderError() from None
+            raise JWTDecodeHeaderException() from None
         token_kid = unverified_header.get('kid')
         if not token_kid:
-            raise JWTKidNotFoundError()
+            raise JWTKidNotFoundException()
 
         pyjwk = await self._get_key_by_kid(token_kid)
 
@@ -227,17 +227,16 @@ class KeycloakOIDC:
                 await self._cache.set(token, json.dumps(decoded_token), ttl=ttl)
             return cast(dict[str, str | list[str]], decoded_token)
         except jwt.ExpiredSignatureError:
-            logger.exception('Token expired.')
-            raise JWTExpiredError() from None
+            raise JWTExpiredException() from None
         except jwt.InvalidTokenError as e:
-            logger.exception('Invalid token: %s', e)
-            raise JWTInvalidTokenError(message=f'{e!s}') from None
+            msg = f'Invalid token: {e!s}'
+            raise JWTInvalidTokenException(msg) from None
         except ValidationError as e:
-            logger.exception('Token validation error: %s', e)
-            raise JWTValidationError() from e
+            msg = f'Token validation error: {e!s}'
+            raise JWTValidationException(msg) from None
         except Exception as e:
-            logger.error('Unexpected error: %s', e)
-            raise KeycloakOIDCError() from e
+            msg = f'Unexpected error during JWT decoding: {e!s}'
+            raise KeycloakOIDCException(msg) from None
 
 
 class KeycloakOIDCFactory:

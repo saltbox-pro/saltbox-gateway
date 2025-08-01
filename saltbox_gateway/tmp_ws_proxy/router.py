@@ -3,7 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, WebSocket
 
 from saltbox_gateway.config import logger
-from saltbox_gateway.errors import SecureWebSocketPolicyViolation
+from saltbox_gateway.exceptions import SecureWebSocketPolicyException
 from saltbox_gateway.services.discovery import DiscoveryService, get_discovery_service
 from saltbox_gateway.tmp_ws_proxy.dao import JobDao, TaskDao
 from saltbox_gateway.tmp_ws_proxy.errors import JobDoesNotExistsException
@@ -39,7 +39,7 @@ async def jobs_endpoint_websocket(
         await job_service.get_job(_jid)
     except JobDoesNotExistsException as e:
         msg = f'Job not found by JID={jid}'
-        raise SecureWebSocketPolicyViolation(msg) from e
+        raise SecureWebSocketPolicyException(msg) from e
 
     secure_websocket = PubSubAuthenticatedWebSocket(websocket, rdb)
     await secure_websocket.handle_pubsub({f'job:{jid}:return': JobResult})
@@ -70,7 +70,7 @@ async def task_websocket(
 
     if not task:
         msg = f'Task not found by ID={tid}'
-        raise SecureWebSocketPolicyViolation(msg)
+        raise SecureWebSocketPolicyException(msg)
 
     def job_new_handler(data: dict) -> str:
         return JobModel(**{'status': JobModel.JobStatus.started, **data}).model_dump_json(by_alias=True)
@@ -92,7 +92,7 @@ async def tasks_websocket_new(websocket: WebSocket, rdb: RedisDependency) -> Non
     secure_websocket = PubSubAuthenticatedWebSocket(websocket, rdb)
     if not secure_websocket.user:
         msg = 'User not authenticated'
-        raise SecureWebSocketPolicyViolation(msg)
+        raise SecureWebSocketPolicyException(msg)
     _opa_result = await opa_client.check_policy(
         package='core.tasks',
         input={

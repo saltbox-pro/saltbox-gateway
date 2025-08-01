@@ -4,7 +4,7 @@ from httpx import AsyncClient
 
 # from pydantic import BaseModel
 from saltbox_gateway.config import SETTINGS, logger
-from saltbox_gateway.errors import OpaRequestError, OpaResponseFormatError
+from saltbox_gateway.exceptions import OpaRequestException, OpaResponseFormatException
 from saltbox_gateway.utils.httpx_client import HttpxClientSingletoneFactory
 from saltbox_gateway.utils.rego import ast, sql
 from saltbox_gateway.utils.rego.mongo_visitor import MongoQueryVisitor
@@ -91,16 +91,16 @@ class AsyncOpaClient:
         response = await self._client.post(url, json=data, timeout=self.timeout)
         logger.debug('OPA check policy response: %s', response.content)
         if not response.is_success:
-            raise OpaRequestError(response.text)
+            raise OpaRequestException(response.text)
         result = response.json().get('result', {})
         if not isinstance(result, dict):
-            raise OpaResponseFormatError(result)
+            raise OpaResponseFormatException(result)
         if 'allow' not in result:
             msg = 'OPA response does not contain "allow" field'
-            raise OpaResponseFormatError(message=msg)
+            raise OpaResponseFormatException(msg)
         if not isinstance(result['allow'], bool):
             msg = '"allow" field in OPA response is not a boolean'
-            raise OpaResponseFormatError(message=msg)
+            raise OpaResponseFormatException(msg)
         logger.debug('OPA check policy result: %s', result)
         return result
 
@@ -125,7 +125,7 @@ class AsyncOpaClient:
         response = await self._client.post(url, json=data, timeout=self.timeout)
         logger.debug('OPA compile response: %s', response.content)
         if not response.is_success:
-            raise OpaRequestError(message=response.text)
+            raise OpaRequestException(response.text)
 
         queries: list = response.json().get('result', {}).get('queries', [])
 

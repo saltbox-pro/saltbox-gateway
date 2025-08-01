@@ -1,26 +1,23 @@
 from fastapi import WebSocketException, status
 
-from saltbox_sdk.fastapi_utils.errors import SaltBoxBaseError
+from saltbox_sdk.exceptions import SaltBoxBaseException
 
 
-class GatewayError(SaltBoxBaseError):
+class GatewayException(SaltBoxBaseException):
     """Base class for all gateway-related exceptions."""
 
     status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
     detail: str = 'An unexpected error occurred in the gateway service.'
 
-    def __str__(self) -> str:
-        return f'{self.__class__.__name__}: {self.detail}'
-
 
 # DAO Errors
-class ServiceDAOError(GatewayError):
+class ServiceDAOException(GatewayException):
     """Base exception for ServiceDAO errors."""
 
     detail: str = 'An error occurred while accessing the service data store.'
 
 
-class ServiceNotFoundError(ServiceDAOError):
+class ServiceNotFoundException(ServiceDAOException):
     """Exception raised when a service is not found."""
 
     status_code = status.HTTP_404_NOT_FOUND
@@ -31,7 +28,7 @@ class ServiceNotFoundError(ServiceDAOError):
         super().__init__(self.detail)
 
 
-class ServiceAlreadyExistsError(ServiceDAOError):
+class ServiceAlreadyExistsException(ServiceDAOException):
     """Exception raised when a service already exists."""
 
     status_code = status.HTTP_409_CONFLICT
@@ -42,17 +39,14 @@ class ServiceAlreadyExistsError(ServiceDAOError):
         super().__init__(self.detail)
 
 
-class ServiceNameIsRequiredError(ServiceDAOError):
+class ServiceNameRequiredException(ServiceDAOException):
     """Exception raised when a service name is required but not provided."""
 
     status_code = status.HTTP_400_BAD_REQUEST
-
-    def __init__(self) -> None:
-        self.detail = 'Service name is required.'
-        super().__init__(self.detail)
+    detail = 'Service name is required.'
 
 
-class ServiceCreationError(ServiceDAOError):
+class ServiceCreationException(ServiceDAOException):
     """Exception raised when there is an error creating a service."""
 
     status_code = status.HTTP_400_BAD_REQUEST
@@ -63,7 +57,7 @@ class ServiceCreationError(ServiceDAOError):
         super().__init__(self.detail)
 
 
-class ServiceUpdateError(ServiceDAOError):
+class ServiceUpdateException(ServiceDAOException):
     """Exception raised when there is an error updating a service."""
 
     status_code = status.HTTP_400_BAD_REQUEST
@@ -74,7 +68,7 @@ class ServiceUpdateError(ServiceDAOError):
         super().__init__(self.detail)
 
 
-class ServiceDeletionError(ServiceDAOError):
+class ServiceDeleteException(ServiceDAOException):
     """Exception raised when there is an error deleting a service."""
 
     status_code = status.HTTP_400_BAD_REQUEST
@@ -86,13 +80,13 @@ class ServiceDeletionError(ServiceDAOError):
 
 
 # Discovery Errors
-class DiscoveryServiceError(GatewayError):
+class DiscoveryServiceException(GatewayException):
     """Base exception for DiscoveryService errors."""
 
     detail: str = 'An error occurred in the discovery service.'
 
 
-class ServiceIsNotOfficial(DiscoveryServiceError):
+class NonOfficialServiceException(DiscoveryServiceException):
     """Exception raised when a service is not an official module."""
 
     status_code = status.HTTP_400_BAD_REQUEST
@@ -103,7 +97,7 @@ class ServiceIsNotOfficial(DiscoveryServiceError):
         super().__init__(self.detail)
 
 
-class ServiceInstanceNotFoundError(DiscoveryServiceError):
+class ServiceInstanceNotFoundException(DiscoveryServiceException):
     """Exception raised when a service instance is not found."""
 
     status_code = status.HTTP_404_NOT_FOUND
@@ -116,13 +110,13 @@ class ServiceInstanceNotFoundError(DiscoveryServiceError):
 
 
 # Proxy Errors
-class ProxyServiceError(GatewayError):
+class ProxyServiceException(GatewayException):
     """Base exception for ProxyService errors."""
 
     detail: str = 'An error occurred while proxying the request.'
 
 
-class ServiceDisabledError(ProxyServiceError):
+class ServiceDisabledException(ProxyServiceException):
     """Exception raised when a service is disabled."""
 
     status_code = status.HTTP_503_SERVICE_UNAVAILABLE
@@ -133,21 +127,21 @@ class ServiceDisabledError(ProxyServiceError):
         super().__init__(self.detail)
 
 
-class ApiProxyRequestError(ProxyServiceError):
+class ApiProxyRequestException(ProxyServiceException):
     """Exception raised when there is an error processing the API proxy request."""
 
     status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+    detail = 'An error occurred while processing the API proxy request.'
 
-    def __init__(self, status_code: int | None = None, message: str | None = None) -> None:
-        self.detail = 'An error occurred while processing the API proxy request.'
+    def __init__(self, detail: str | None = None, status_code: int | None = None) -> None:
         if status_code:
             self.status_code = status_code
-        if message:
-            self.detail += f' Details: {message}'
+        if detail:
+            self.detail = detail
         super().__init__(self.detail)
 
 
-class ServiceHasNoInstancesError(ProxyServiceError):
+class ServiceHasNoInstancesException(ProxyServiceException):
     """Exception raised when a service has no instances available."""
 
     status_code = status.HTTP_503_SERVICE_UNAVAILABLE
@@ -158,7 +152,7 @@ class ServiceHasNoInstancesError(ProxyServiceError):
         super().__init__(self.detail)
 
 
-class ServiceHasNoHealthyInstancesError(ProxyServiceError):
+class ServiceHasNoHealthyInstancesException(ProxyServiceException):
     """Exception raised when no healthy instance is found for a service."""
 
     status_code = status.HTTP_503_SERVICE_UNAVAILABLE
@@ -169,7 +163,7 @@ class ServiceHasNoHealthyInstancesError(ProxyServiceError):
         super().__init__(self.detail)
 
 
-class NotEnoughPermissionsError(ProxyServiceError):
+class NotEnoughPermissionsException(ProxyServiceException):
     """Exception raised when the user does not have enough permissions to access a service."""
 
     status_code = status.HTTP_403_FORBIDDEN
@@ -184,19 +178,14 @@ class NotEnoughPermissionsError(ProxyServiceError):
         super().__init__(self.detail)
 
 
-class ProxyStaticFileError(ProxyServiceError):
+class ProxyStaticFileException(ProxyServiceException):
     """Exception raised when there is an error proxying a static file."""
 
     status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
-
-    def __init__(self, message: str | None = None) -> None:
-        self.detail = 'An error occurred while proxying the static file.'
-        if message:
-            self.detail = self.detail + f' Details: {message}'
-        super().__init__(self.detail)
+    detail = 'An error occurred while proxying the static file.'
 
 
-class ServiceHasNoEndpointsError(ProxyServiceError):
+class ServiceHasNoEndpointsException(ProxyServiceException):
     """Exception raised when a service has no endpoints defined."""
 
     status_code = status.HTTP_404_NOT_FOUND
@@ -207,7 +196,7 @@ class ServiceHasNoEndpointsError(ProxyServiceError):
         super().__init__(self.detail)
 
 
-class ServiceEndpointNotFoundError(ProxyServiceError):
+class ServiceEndpointNotFoundException(ProxyServiceException):
     """Exception raised when a service endpoint is not found."""
 
     status_code = status.HTTP_404_NOT_FOUND
@@ -219,232 +208,174 @@ class ServiceEndpointNotFoundError(ProxyServiceError):
         super().__init__(self.detail)
 
 
-class ProxyOpaClientInitializationError(ProxyServiceError):
+class ProxyOpaClientInitException(ProxyServiceException):
     """Exception raised when there is an error initializing the OPA client."""
 
     status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
-
-    def __init__(self, message: str | None = None) -> None:
-        self.detail = 'An error occurred while initializing the OPA client.'
-        if message:
-            self.detail = self.detail + f' Details: {message}'
-        super().__init__(self.detail)
+    detail = 'An error occurred while initializing the OPA client.'
 
 
 # OPA Client Errors
-class AsyncOpaClientError(GatewayError):
+class OpaClientException(GatewayException):
     """Base exception for OPA client errors."""
 
     status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
     detail: str = 'An error occurred while communicating with the OPA server.'
 
-    def __init__(self, message: str | None = None) -> None:
-        if message:
-            self.detail = f'{self.detail} Details: {message}'
-        super().__init__(self.detail)
 
-
-class OpaRequestError(AsyncOpaClientError):
+class OpaRequestException(OpaClientException):
     """Exception raised when there is an error making a request to the OPA server."""
 
     detail: str = 'An error occurred while making a request to the OPA server.'
 
 
-class OpaResponseFormatError(AsyncOpaClientError):
+class OpaResponseFormatException(OpaClientException):
     """Exception raised when the OPA server response format is invalid."""
 
     detail: str = 'Invalid OPA response format.'
 
 
 # Keycloak OIDC Errors
-class KeycloakOIDCError(GatewayError):
+class KeycloakOIDCException(GatewayException):
     """Base class for Keycloak OIDC errors."""
 
     status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
     detail: str = 'An error occurred while processing Keycloak OIDC operations.'
 
 
-class AuthorizationUrlError(KeycloakOIDCError):
+class AuthorizationUrlException(KeycloakOIDCException):
     """Exception raised when the Keycloak OIDC authorization endpoint is not configured."""
 
     status_code = status.HTTP_401_UNAUTHORIZED
-
-    def __init__(self) -> None:
-        self.detail = 'Authorization URL not found in OIDC config. Please check your Keycloak OIDC settings.'
-        super().__init__(self.detail)
+    detail = 'Authorization URL not found in OIDC config. Please check your Keycloak OIDC settings.'
 
 
-class TokenUrlError(KeycloakOIDCError):
+class TokenUrlException(KeycloakOIDCException):
     """Exception raised when the Keycloak OIDC token endpoint is not configured."""
 
     status_code = status.HTTP_401_UNAUTHORIZED
-
-    def __init__(self) -> None:
-        self.detail = 'Token URL not found in OIDC config. Please check your Keycloak OIDC settings.'
-        super().__init__(self.detail)
+    detail = 'Token URL not found in OIDC config. Please check your Keycloak OIDC settings.'
 
 
-class IssuerError(KeycloakOIDCError):
+class IssuerException(KeycloakOIDCException):
     """Exception raised when the Keycloak OIDC issuer is not configured."""
 
     status_code = status.HTTP_401_UNAUTHORIZED
-
-    def __init__(self) -> None:
-        self.detail = 'Issuer not found in OIDC config. Please check your Keycloak OIDC settings.'
-        super().__init__(self.detail)
+    detail = 'Issuer not found in OIDC config. Please check your Keycloak OIDC settings.'
 
 
-class OIDCConfigFetchError(KeycloakOIDCError):
+class OIDCConfigFetchException(KeycloakOIDCException):
     """Exception raised when there is an error fetching the OIDC config."""
 
     status_code = status.HTTP_503_SERVICE_UNAVAILABLE
-
-    def __init__(self) -> None:
-        self.detail = 'Error fetching OIDC config. Keycloak server is unavailable.'
-        super().__init__(self.detail)
+    detail = 'Error fetching OIDC config. Keycloak server is unavailable.'
 
 
-class OIDCConfigTimeoutError(KeycloakOIDCError):
+class OIDCConfigTimeoutException(KeycloakOIDCException):
     """Exception raised when there is a timeout fetching the OIDC config."""
 
     status_code = status.HTTP_503_SERVICE_UNAVAILABLE
-
-    def __init__(self) -> None:
-        self.detail = 'Timeout error fetching OIDC config. Keycloak server is unavailable.'
-        super().__init__(self.detail)
+    detail = 'Timeout error fetching OIDC config. Keycloak server is unavailable.'
 
 
-class OIDCConfigUnexpectedError(KeycloakOIDCError):
+class OIDCConfigUnexpectedException(KeycloakOIDCException):
     """Exception raised for unexpected errors fetching the OIDC config."""
 
     status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
-
-    def __init__(self) -> None:
-        self.detail = 'Unexpected error fetching OIDC config'
-        super().__init__(self.detail)
+    detail = 'Unexpected error fetching OIDC config'
 
 
-class JWKSKeyNotFoundError(KeycloakOIDCError):
+class JWKSKeyNotFoundException(KeycloakOIDCException):
     """Exception raised when a key is not found in JWKS."""
 
     status_code = status.HTTP_401_UNAUTHORIZED
-
-    def __init__(self) -> None:
-        self.detail = 'Key not found in JWKS.'
-        super().__init__(self.detail)
+    detail = 'Key not found in JWKS.'
 
 
-class JWKSUriNotFoundError(KeycloakOIDCError):
+class JWKSUriNotFoundException(KeycloakOIDCException):
     """Exception raised when JWKS URI is not found in OIDC config."""
 
     status_code = status.HTTP_401_UNAUTHORIZED
-
-    def __init__(self) -> None:
-        self.detail = 'JWKS URI not found in OIDC config.'
-        super().__init__(self.detail)
+    detail = 'JWKS URI not found in OIDC config.'
 
 
-class JWKSFetchError(KeycloakOIDCError):
+class JWKSFetchException(KeycloakOIDCException):
     """Exception raised when there is an error fetching JWKS."""
 
     status_code = status.HTTP_503_SERVICE_UNAVAILABLE
-
-    def __init__(self) -> None:
-        self.detail = 'Error fetching JWKS. Keycloak server is unavailable.'
-        super().__init__(self.detail)
+    detail = 'Error fetching JWKS. Keycloak server is unavailable.'
 
 
-class JWKSFetchTimeoutError(KeycloakOIDCError):
+class JWKSFetchTimeoutException(KeycloakOIDCException):
     """Exception raised when there is a timeout fetching JWKS."""
 
     status_code = status.HTTP_503_SERVICE_UNAVAILABLE
-
-    def __init__(self) -> None:
-        self.detail = 'Timeout error fetching JWKS. Keycloak server is unavailable.'
-        super().__init__(self.detail)
+    detail = 'Timeout error fetching JWKS. Keycloak server is unavailable.'
 
 
-class AuthorizationHeaderInvalidError(KeycloakOIDCError):
+class AuthorizationHeaderInvalidException(KeycloakOIDCException):
     """Exception raised when the authorization header is missing or invalid."""
 
     status_code = status.HTTP_401_UNAUTHORIZED
-
-    def __init__(self) -> None:
-        self.detail = 'Authorization header is missing or invalid.'
-        super().__init__(self.detail)
+    detail = 'Authorization header is missing or invalid.'
 
 
-class JWTDecodeHeaderError(KeycloakOIDCError):
+class JWTDecodeHeaderException(KeycloakOIDCException):
     """Exception raised when there is a decode error for JWT token header."""
 
     status_code = status.HTTP_401_UNAUTHORIZED
-
-    def __init__(self) -> None:
-        self.detail = 'Decode error for JWT token header.'
-        super().__init__(self.detail)
+    detail = 'Decode error for JWT token header.'
 
 
-class JWTKidNotFoundError(KeycloakOIDCError):
+class JWTKidNotFoundException(KeycloakOIDCException):
     """Exception raised when KID is not found in token."""
 
     status_code = status.HTTP_401_UNAUTHORIZED
-
-    def __init__(self) -> None:
-        self.detail = 'KID not found in token.'
-        super().__init__(self.detail)
+    detail = 'KID not found in token.'
 
 
-class JWTExpiredError(KeycloakOIDCError):
+class JWTExpiredException(KeycloakOIDCException):
     """Exception raised when the token has expired."""
 
     status_code = status.HTTP_401_UNAUTHORIZED
-
-    def __init__(self) -> None:
-        self.detail = 'Token has expired'
-        super().__init__(self.detail)
+    detail = 'Token has expired'
 
 
-class JWTInvalidTokenError(KeycloakOIDCError):
+class JWTInvalidTokenException(KeycloakOIDCException):
     """Exception raised when the token is invalid."""
 
     status_code = status.HTTP_401_UNAUTHORIZED
-
-    def __init__(self, message: str = 'Invalid token') -> None:
-        self.detail = message
-        super().__init__(self.detail)
+    detail = 'Invalid token'
 
 
-class JWTValidationError(KeycloakOIDCError):
+class JWTValidationException(KeycloakOIDCException):
     """Exception raised when there is a token validation error."""
 
     status_code = status.HTTP_401_UNAUTHORIZED
-
-    def __init__(self) -> None:
-        self.detail = 'Token validation error'
-        super().__init__(self.detail)
+    detail = 'Token validation error'
 
 
 # WebSocket Errors
-class SecureWebSocketError(WebSocketException):
+class SecureWebSocketException(WebSocketException):
     """Base class for secure WebSocket errors."""
 
     status_code = status.WS_1011_INTERNAL_ERROR
     detail: str = 'An unexpected error occurred in the secure WebSocket connection.'
 
-    def __init__(self, message: str | None = None) -> None:
-        if message:
-            self.detail = f'{self.detail} Details: {message}'
+    def __init__(self, detail: str | None = None) -> None:
+        if detail:
+            self.detail = detail
         super().__init__(code=self.status_code, reason=self.detail)
 
 
-class SecureWebSocketPolicyViolation(SecureWebSocketError):
+class SecureWebSocketPolicyException(SecureWebSocketException):
     """Generic error means message violates policy of socket"""
 
     status_code = status.WS_1008_POLICY_VIOLATION
     detail: str = 'WebSocket policy violation occurred.'
 
 
-class SecureWebSocketServerError(SecureWebSocketError):
+class SecureWebSocketServerException(SecureWebSocketException):
     """Unexpected conditions prevents from fulfilling a request"""
 
     status_code = status.WS_1011_INTERNAL_ERROR

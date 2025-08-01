@@ -8,7 +8,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 
 from saltbox_gateway.config import logger
-from saltbox_gateway.errors import KeycloakOIDCError
+from saltbox_gateway.exceptions import KeycloakOIDCException
 from saltbox_gateway.utils.keycloak_oidc import KeycloakOIDCFactory
 from saltbox_sdk.db.schemas_base import ANONYMOUS_USER, User
 
@@ -42,7 +42,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         try:
             decoded_token = await self._oidc.decode_jwt(token)
             request.state.user = User(**decoded_token)
-        except KeycloakOIDCError as e:
+        except KeycloakOIDCException as e:
             return JSONResponse(status_code=e.status_code, content={'detail': e.detail})
 
         request_context.set(request)

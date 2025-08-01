@@ -3,7 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Body, Depends
 
 from saltbox_gateway.config import logger
-from saltbox_gateway.errors import DiscoveryServiceError
+from saltbox_gateway.exceptions import DiscoveryServiceException
 from saltbox_gateway.schemas import (
     DiscoveryServiceConfig,
 )
@@ -25,7 +25,7 @@ async def health_check(redis: RedisDependency) -> dict:
         pong = await redis.ping()
         return {'status': 'healthy', 'service': 'api-gateway', 'redis': pong}
     except Exception:
-        raise DiscoveryServiceError() from None
+        raise DiscoveryServiceException() from None
 
 
 @router.get('/config', response_model_exclude={'services': {'__all__': {'static_host'}}})
@@ -51,7 +51,7 @@ async def register_service(
             success=True,
             message=f'Service {service.name} registered successfully',
         )
-    except DiscoveryServiceError as e:
+    except DiscoveryServiceException as e:
         logger.exception(f'Discovery service error: {e}')
         return DiscoveryResponse(
             success=False,
