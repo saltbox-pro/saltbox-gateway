@@ -97,29 +97,28 @@ class ProxyService:
 
     async def api_proxy(self, service_name: str, path: str) -> httpx.Response:
         logger.debug(f'NEW Processing request for service: {service_name}, path: {path}')
+        endpoint = None
         service = await self._get_service(service_name)
-
         service_instance = await self._choose_healthy_instance(service)
         if not service_instance.endpoints:
             raise ServiceHasNoEndpointsException(service.name)
 
-        endpoint = await self._get_endpoint(service_instance.endpoints, path)
+        if self._is_swagger_path(path, service_instance):
+            endpoint = ServiceEndpoint(
+                path=path,
+                method=self._request_data.method,
+                opa_config=OPAConfig(
+                    policy='public',
+                    is_partial=False,
+                    query_filter_format=None,
+                ),
+                cache_ttl=0,  # Disable caching for docs
+            )
+        else:
+            endpoint = await self._get_endpoint(service_instance.endpoints, path)
 
         if not endpoint:
-            logger.debug(f'No endpoint found for service: {service_name}, path: {path}')
-            if path.startswith('docs') or path.startswith('openapi'):
-                endpoint = ServiceEndpoint(
-                    path=path,
-                    method=self._request_data.method,
-                    opa_config=OPAConfig(
-                        policy='public',
-                        is_partial=False,
-                        query_filter_format=None,
-                    ),
-                    cache_ttl=0,  # Disable caching for docs
-                )
-            else:
-                raise ServiceEndpointNotFoundException(service.name, path)
+            raise ServiceEndpointNotFoundException(service.name, path)
 
         url = f'http://{service_instance.host}:{service_instance.port}/{path.strip("/")}'
 
@@ -135,6 +134,15 @@ class ProxyService:
             await self._add_response_to_cache(service_response, endpoint.cache_ttl)
 
         return service_response
+
+    def _is_swagger_path(self, path: str, instance: ServiceInstance) -> bool:
+        """Check if the path is a Swagger or OpenAPI documentation path."""
+        current_path = path.strip('/')
+        if instance.docs_path and current_path.startswith(instance.docs_path.strip('/')):
+            return True
+        if instance.openapi_path and current_path.startswith(instance.openapi_path.strip('/')):
+            return True
+        return False
 
     async def _check_access(
         self, opa_config: OPAConfig, service_name: str, path: str, service_response: httpx.Response

@@ -52,7 +52,7 @@ class HealthChecker:
 
     async def _check_service_instances(self, service: ServiceSchema) -> None:
         async def check_instance(instance: ServiceInstance) -> ServiceInstance:
-            url = f'http://{instance.host}:{instance.port}{instance.health_check_path}'
+            url = f'http://{instance.host}:{instance.port}{instance.healthcheck_path}'
             try:
                 response = await self._httpx_client.get(url, timeout=SETTINGS.health_check_timeout)
                 if response.status_code == 200:
@@ -82,27 +82,8 @@ class HealthChecker:
 
         service.instances = updated_instances
 
-        # TODO: Deprecated
-        # first_healthy = next((inst for inst in service.instances if inst.healthy), None)
-        # if first_healthy and service.auto_discover_routes:
-        #     discovered_endpoints = await self._discover_endpoints(first_healthy)
-        #     if discovered_endpoints:
-        #         service.endpoints = discovered_endpoints
-
         async with self._locker.create(key=service.name):
             await self._dao.update(service.model_dump())
-
-    # TODO: Deprecated
-    # async def _discover_endpoints(self, instance: ServiceInstance) -> list[ServiceEndpoint]:
-    #     """Discover endpoints for a service instance."""
-    #     base_route = f'/{instance.base_route.strip("/")}' if instance.base_route else ''
-    #     url = f'http://{instance.host}:{instance.port}{base_route}/discovery/openapi-routes'
-    #     response = await self._httpx_client.get(url, timeout=SETTINGS.proxy_request_timeout)
-    #     if response.status_code == 200:
-    #         routes_data = response.json()
-    #         if 'endpoints' in routes_data:
-    #             return [ServiceEndpoint(**endpoint) for endpoint in routes_data['endpoints']]
-    #     return []
 
 
 def get_health_checker_service() -> HealthChecker:
