@@ -5,7 +5,7 @@ from collections.abc import Callable
 from typing import Annotated
 
 import httpx
-from fastapi import Depends, Request
+from fastapi import Depends, Request, UploadFile
 from redis.asyncio import Redis
 
 from saltbox_gateway.config import SETTINGS, logger
@@ -66,10 +66,35 @@ class ProxyService:
         if request.method in ['POST', 'PUT', 'PATCH', 'DELETE']:
             raw_body = await request.body()
             body = None
-            if headers.get('content-type', '').startswith('application/json'):
+            content_type = headers.get('content-type', '')
+            if content_type.startswith('application/json'):
                 try:
                     body = json.loads(raw_body)
                 except Exception:
+                    body = None
+
+            elif content_type.startswith('multipart/form-data'):
+                # Handle multipart form data
+                try:
+                    form_data = await request.form()
+                    body = {
+                        'fields': {k: v for k, v in form_data.items() if not isinstance(v, UploadFile)},
+                        'files': [
+                            {'filename': file.filename, 'content_type': file.content_type, 'size': file.size}
+                            for file in form_data.values()
+                            if isinstance(file, UploadFile)
+                        ],
+                    }
+                except Exception as e:
+                    logger.error(f'Error parsing multipart form data: {e}')
+                    body = None
+            elif content_type.startswith('application/x-www-form-urlencoded'):
+                # Handle URL-encoded form data
+                try:
+                    form_data = await request.form()
+                    body = dict(form_data.items())
+                except Exception as e:
+                    logger.error(f'Error parsing URL-encoded form data: {e}')
                     body = None
         else:
             raw_body = None
@@ -96,7 +121,6 @@ class ProxyService:
         )
 
     async def api_proxy(self, service_name: str, path: str) -> httpx.Response:
-        logger.debug(f'NEW Processing request for service: {service_name}, path: {path}')
         endpoint = None
         service = await self._get_service(service_name)
         service_instance = await self._choose_healthy_instance(service)
@@ -108,6 +132,7 @@ class ProxyService:
                 path=path,
                 method=self._request_data.method,
                 opa_config=OPAConfig(
+                    action='swagger',
                     policy='public',
                     is_partial=False,
                     query_filter_format=None,
@@ -128,11 +153,76 @@ class ProxyService:
             if cached_response:
                 return cached_response
 
-        service_response = await self._get_response_from_service(url)
+        # Partial OPA check:
+        # 1) If the endpoint has a policy and is partial, check access
+        # 2) If OPA response allows, proceed with the proxy request
+
+        # Full OPA check:
+        # 1) If the endpoint has a policy and is not partial check method:
+        #     - If method is GET, proxy request and get response. Add response to OPA input and check access
+        #     - If method is not GET, add body to OPA input and check access
+        # 2) If OPA response allows, proceed with the proxy request
+
+        # service_response = await self._get_response_from_service(url)
+        service_response = await self._get_response_or_raise(
+            url=url,
+            path=path,
+            service_name=service_name,
+            opa_config=endpoint.opa_config,
+        )
 
         if endpoint.cache_ttl > 0 and self._is_response_cachable(service_response):
             await self._add_response_to_cache(service_response, endpoint.cache_ttl)
 
+        return service_response
+
+    async def _get_response_or_raise(
+        self, url: str, path: str, service_name: str, opa_config: OPAConfig
+    ) -> httpx.Response:
+        if not opa_config.policy or opa_config.policy == 'public':
+            return await self._get_response_from_service(url)
+
+        # TODO: add check for method? (Only GET can be partial?)
+        if opa_config.is_partial:
+            input_data = await self._prepare_input_for_opa(service_name, path, action_name=opa_config.action)
+
+            opa_response = await self._opa_client.check_access(
+                package=opa_config.policy,
+                input=input_data,
+                is_partial=True,
+                unknowns=opa_config.unknowns or [],
+                partial_query=opa_config.partial_query or 'allow == true',
+                query_filter_format=opa_config.query_filter_format,
+            )
+            if not opa_response.get('allow', False):
+                raise NotEnoughPermissionsException(service_name=service_name, path=path)
+
+            # Add query to request data if provided by OPA
+            if opa_response.get('query') is not None:
+                self._request_data.query_params.update({'opa_query': json.dumps(opa_response['query'])})
+                logger.debug(f'Added OPA query to request: {opa_response["query"]}')
+
+        service_response = await self._get_response_from_service(url)
+        logger.debug(f'Service response: {service_response.status_code} {service_response.text}')
+
+        if not opa_config.is_partial:
+            try:
+                json_data = service_response.json()
+                logger.debug(f'Parsed JSON data from service response: {json_data}')
+            except json.JSONDecodeError:
+                json_data = {}
+            input_data = await self._prepare_input_for_opa(
+                service_name, path, action_name=opa_config.action, object=json_data
+            )
+
+            opa_response = await self._opa_client.check_access(
+                package=opa_config.policy,
+                input=input_data,
+                is_partial=False,
+            )
+
+            if not opa_response.get('allow', False):
+                raise NotEnoughPermissionsException(service_name=service_name, path=path)
         return service_response
 
     def _is_swagger_path(self, path: str, instance: ServiceInstance) -> bool:
@@ -144,50 +234,14 @@ class ProxyService:
             return True
         return False
 
-    async def _check_access(
-        self, opa_config: OPAConfig, service_name: str, path: str, service_response: httpx.Response
-    ) -> None:
-        # компайл только для гет-запросов? Как разделить запросы к OPA для частичного и полного запроса?
-        if (
-            opa_config.policy
-            and opa_config.policy != 'public'
-            and opa_config.is_partial
-            and opa_config.partial_query is not None
-        ):
-            input_data = await self._prepare_input_for_opa(service_name, path)
-
-            opa_response = await self._opa_client.check_access(
-                package=opa_config.policy,
-                input=input_data,
-                is_partial=True,
-                unknowns=opa_config.unknowns or [],
-                partial_query=opa_config.partial_query,
-                query_filter_format=opa_config.query_filter_format,
-            )
-            if not opa_response.get('allow', False):
-                raise NotEnoughPermissionsException(service_name=service_name, path=path)
-
-            if opa_response.get('query') is not None:
-                self._request_data.query_params.update({'opa_query': opa_response['query']})
-
-        # if opa_config is not partial - check access for full query
-        if opa_config.policy and opa_config.policy != 'public' and not opa_config.is_partial:
-            try:
-                json_data = service_response.json().get('data', None)
-            except json.JSONDecodeError:
-                json_data = {}
-            input_data = await self._prepare_input_for_opa(service_name, path, object=json_data)
-            opa_response = await self._opa_client.check_access(
-                package=opa_config.policy,
-                input=input_data,
-                is_partial=False,
-            )
-
-    async def _prepare_input_for_opa(self, service_name: str, path: str, object: dict | None = None) -> dict:
-        return {
+    async def _prepare_input_for_opa(
+        self, service_name: str, path: str, action_name: str, object: dict | None = None
+    ) -> dict:
+        data = {
             'subject': self._request_data.user.model_dump(),
             'action': {
                 'method': self._request_data.method,
+                'name': action_name,
             },
             'resource': {
                 'service_name': service_name,
@@ -197,6 +251,8 @@ class ProxyService:
                 'body': self._request_data.body,
             },
         }
+        logger.debug(f'Preparing OPA input: {data}')
+        return data
 
     def _is_response_cachable(self, response: httpx.Response) -> bool:
         if not self._request_data.is_cachable:

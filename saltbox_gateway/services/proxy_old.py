@@ -175,7 +175,7 @@ class ProxyService:
     async def _get_endpoint_config(self, instance: ServiceInstance, method: str, path: str) -> ServiceEndpoint:
         """Get the endpoint configuration for a service."""
         if not instance or not instance.endpoints:
-            return ServiceEndpoint(method=method, path=path)
+            return ServiceEndpoint(method=method, path=path, opa_config=OPAConfig(action='unknown'))
 
         request_path = path.strip('/')
 
@@ -185,7 +185,7 @@ class ProxyService:
                 if pattern.match(request_path):
                     return endpoint
 
-        return ServiceEndpoint(method=method, path=path)
+        return ServiceEndpoint(method=method, path=path, opa_config=OPAConfig(action='unknown'))
 
     # TODO: Need to refactor this method to use a more structured way of handling request parameters
     async def _get_request_params(self) -> dict:
