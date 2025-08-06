@@ -168,10 +168,15 @@ class NotEnoughPermissionsException(ProxyServiceException):
 
     status_code = status.HTTP_403_FORBIDDEN
 
-    def __init__(self, service_name: str, path: str | None = None) -> None:
+    def __init__(self, service_name: str, path: str | None = None, action: str | None = None) -> None:
         self.service_name = service_name
         self.path = path
-        if path:
+        self.action = action
+        if action and path:
+            self.detail = (
+                f'You do not have enough permissions to perform action "{action}" on service "{service_name}".'
+            )
+        elif path:
             self.detail = f'You do not have enough permissions to access "{path}" of service "{service_name}".'
         else:
             self.detail = f'You do not have enough permissions to access service "{service_name}".'

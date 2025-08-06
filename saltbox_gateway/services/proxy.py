@@ -179,6 +179,7 @@ class ProxyService:
     async def _get_response_or_raise(
         self, url: str, path: str, service_name: str, opa_config: OPAConfig
     ) -> httpx.Response:
+        service_response = None
         if not opa_config.policy or opa_config.policy == 'public':
             return await self._get_response_from_service(url)
 
@@ -202,18 +203,20 @@ class ProxyService:
                 self._request_data.query_params.update({'opa_query': json.dumps(opa_response['query'])})
                 logger.debug(f'Added OPA query to request: {opa_response["query"]}')
 
-        service_response = await self._get_response_from_service(url)
-        logger.debug(f'Service response: {service_response.status_code} {service_response.text}')
-
         if not opa_config.is_partial:
-            try:
-                json_data = service_response.json()
-                logger.debug(f'Parsed JSON data from service response: {json_data}')
-            except json.JSONDecodeError:
-                json_data = {}
-            input_data = await self._prepare_input_for_opa(
-                service_name, path, action_name=opa_config.action, object=json_data
-            )
+            if self._request_data.method == 'GET':
+                service_response = await self._get_response_from_service(url)
+                logger.debug(f'Service response: {service_response.status_code} {service_response.text}')
+                try:
+                    json_data = service_response.json()
+                    logger.debug(f'Parsed JSON data from service response: {json_data}')
+                except json.JSONDecodeError:
+                    json_data = {}
+                input_data = await self._prepare_input_for_opa(
+                    service_name, path, action_name=opa_config.action, object=json_data
+                )
+            else:
+                input_data = await self._prepare_input_for_opa(service_name, path, action_name=opa_config.action)
 
             opa_response = await self._opa_client.check_access(
                 package=opa_config.policy,
@@ -222,8 +225,8 @@ class ProxyService:
             )
 
             if not opa_response.get('allow', False):
-                raise NotEnoughPermissionsException(service_name=service_name, path=path)
-        return service_response
+                raise NotEnoughPermissionsException(service_name=service_name, path=path, action=opa_config.action)
+        return service_response or await self._get_response_from_service(url)
 
     def _is_swagger_path(self, path: str, instance: ServiceInstance) -> bool:
         """Check if the path is a Swagger or OpenAPI documentation path."""
