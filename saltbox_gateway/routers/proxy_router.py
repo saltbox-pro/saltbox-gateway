@@ -1,8 +1,11 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Body, Depends, Query, Response
 
+from saltbox_gateway.config import logger
 from saltbox_gateway.services.proxy import ProxyService, get_proxy_service
+from saltbox_gateway.utils.opa_client import AsyncOpaClient, get_opa_client
+from saltbox_sdk.discovery_client.schemas import OPAQueryFilterFormat
 
 router = APIRouter(prefix='/api', tags=['API Proxy'])
 
@@ -24,6 +27,19 @@ async def proxy_request(
         headers=dict(response.headers),
         media_type=response.headers.get('content-type'),
     )
+
+
+# Api route for devs
+@router.post('/query-translator')
+async def query_translator(
+    opa_client: Annotated[AsyncOpaClient, Depends(get_opa_client)],
+    result: Annotated[dict, Body(embed=True)],
+    format: Annotated[
+        OPAQueryFilterFormat, Query(..., description='Format to translate queries to')
+    ] = OPAQueryFilterFormat.MONGO,
+) -> dict:
+    logger.debug('result: %s', result)
+    return await opa_client.query_translator(result, format=format)
 
 
 # @router.websocket('/ws/{user_id}')

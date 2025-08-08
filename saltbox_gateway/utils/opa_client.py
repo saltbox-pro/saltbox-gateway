@@ -109,9 +109,10 @@ class AsyncOpaClient:
         package: str,
         input: dict,
         unknowns: list[str],
-        query_filter_format: OPAQueryFilterFormat | None = OPAQueryFilterFormat.MONGO,
+        query_filter_format: OPAQueryFilterFormat | None = None,
         partial_query: str = 'allow == true',
     ) -> dict:
+        query_filter_format = query_filter_format or OPAQueryFilterFormat.MONGO
         url = f'{self.base_url}/compile'
         data = {
             'query': f'data.{package}.{partial_query}',
@@ -127,24 +128,29 @@ class AsyncOpaClient:
         if not response.is_success:
             raise OpaRequestException(response.text)
 
-        queries: list = response.json().get('result', {}).get('queries', [])
+        opa_response = response.json().get('result', {})
+        if not opa_response:
+            return {'allow': False, 'query': None}
 
-        if len(queries) == 0:
+        return await self.query_translator(opa_response, query_filter_format)
+
+    async def query_translator(
+        self, opa_response: dict, format: OPAQueryFilterFormat = OPAQueryFilterFormat.MONGO
+    ) -> dict:
+        """Translate a list of queries to a specific format."""
+        queries = opa_response.get('queries', [])
+        if not queries:
             return {'allow': False, 'query': None}
         if any(len(x) == 0 for x in queries):
             return {'allow': True, 'query': None}
 
         query_set = ast.QuerySet.from_data(queries)
-
         logger.debug('AST rego: %s', query_set)
 
-        if query_filter_format == OPAQueryFilterFormat.MONGO:
+        if format == OPAQueryFilterFormat.MONGO:
             return await self._compile_to_mongo(query_set)
-        if query_filter_format == OPAQueryFilterFormat.SQL:
+        if format == OPAQueryFilterFormat.SQL:
             return await self._compile_to_sql(query_set)
-
-        msg = f'Unsupported query filter format: {query_filter_format}'
-        raise ValueError(msg)
 
     async def _compile_to_mongo(self, query_set: ast.QuerySet) -> dict:
         query_set.preprocess()
