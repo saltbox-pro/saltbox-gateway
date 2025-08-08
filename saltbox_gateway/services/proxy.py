@@ -287,15 +287,43 @@ class ProxyService:
             return None
         cached_response = await self._cache.get(self._request_data.cache_key)
         if cached_response:
-            if isinstance(cached_response, bytes | str):
+            if isinstance(cached_response, (bytes, str)):
                 if isinstance(cached_response, bytes):
                     cached_response = cached_response.decode('utf-8')
-                cached_response = json.loads(cached_response)
+                try:
+                    cached_response = json.loads(cached_response)
+                except Exception as e:
+                    logger.warning(f'Error parsing cached response: {e}')
+                    return None
             logger.debug(f'Cache hit for key: {self._request_data.cache_key}')
+            # Фильтруем hop-by-hop заголовки и сбрасываем content-length
+            hop_by_hop = {
+                'connection',
+                'keep-alive',
+                'proxy-authenticate',
+                'proxy-authorization',
+                'te',
+                'trailers',
+                'transfer-encoding',
+                'upgrade',
+                'content-length',
+            }
+            raw_headers = (cached_response.get('headers') or {}) if isinstance(cached_response, dict) else {}
+            headers = {k: v for k, v in raw_headers.items() if k.lower() not in hop_by_hop}
+
+            content_b64 = (cached_response or {}).get('content')
+            try:
+                content = base64.b64decode(content_b64) if content_b64 is not None else b''
+            except Exception as e:
+                logger.warning(f'Error decoding cached content: {e}')
+                return None
+
+            status_code = int((cached_response or {}).get('status_code', 200))
+            logger.debug(f'Returning cached response with status code: {status_code}')
             return httpx.Response(
-                status_code=cached_response['status_code'],
-                headers=cached_response['headers'],
-                content=base64.b64decode(cached_response['content']),
+                status_code=status_code,
+                headers=headers,
+                content=content,
             )
         logger.debug(f'Cache miss for key: {self._request_data.cache_key}')
         return None
@@ -382,7 +410,7 @@ class ProxyService:
     @staticmethod
     def _path_to_regex(endpoint_path: str) -> re.Pattern:
         regex = re.sub(r'{[^/]+}', r'[^/]+', endpoint_path.strip('/'))
-        return re.compile(f'^{regex}$')
+        return re.compile(f'^{regex}/?$')
 
     async def _get_endpoint(self, endpoints: list[ServiceEndpoint], path: str) -> ServiceEndpoint | None:
         request_path = path.strip('/')

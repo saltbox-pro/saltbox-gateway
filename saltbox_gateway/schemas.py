@@ -1,3 +1,4 @@
+import json
 from typing import Annotated, Any
 
 from pydantic import (
@@ -39,7 +40,8 @@ class ProxyRequestData(BaseModel):
     @computed_field  # type: ignore[prop-decorator]
     @property
     def cache_key(self) -> str:
-        return f'{self.user.sub}:{self.method}:{self.path}:{self.query_params}'
+        qp = json.dumps(self.query_params, sort_keys=True, separators=(',', ':'), ensure_ascii=False)
+        return f'{self.user.sub}:{self.method}:{self.path}:{qp}'
 
     @computed_field  # type: ignore[prop-decorator]
     @property
