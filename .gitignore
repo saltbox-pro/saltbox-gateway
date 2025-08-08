@@ -1,5 +1,5 @@
 # Python
-*.egg-info
+*.egg-info/*
 *.pyc
 .coverage
 .flake8
