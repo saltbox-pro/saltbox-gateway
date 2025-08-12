@@ -5,4 +5,4 @@ pydantic~=2.11.3
 redis~=4.5.5
 uvicorn[standard]~=0.29.0
 pyjwt[crypto]~=2.8.0
-saltbox-sdk @ git+https://dev.saltbox.pro/saltbox/saltbox-sdk/@1d005f9cfa4c7f87b861c7ebb9e749cf0ae913bc
+saltbox-sdk @ git+https://dev.saltbox.pro/saltbox/saltbox-sdk/@72198107c71958389ed66a0c6320a463dcbd9e6b
