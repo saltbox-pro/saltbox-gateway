@@ -1,5 +1,5 @@
 from datetime import datetime
-from enum import Enum
+from enum import Enum, StrEnum
 from typing import Annotated, Any, Self, TypeVar
 
 from pydantic import (
@@ -271,10 +271,25 @@ class TaskPostProcessing(TaskPostProcessingCreate):
     notify_dt: Iso8601ZDatetime | None = Field(title='Notify dt', default=None)
 
 
+class TaskStatus(StrEnum):
+    created = 'created'
+    running = 'running'
+    stopping = 'stopping'
+    stopped = 'stopped'
+    postprocessing = 'postprocessing'
+    finished = 'finished'
+
+
 class TaskModel(BaseModel):
     id: str = Field(title='ID', alias='_id', serialization_alias='id')
     jobs: dict[str, TaskJob] = Field(title='Jobs', default={})
     minions: dict[str, TaskMinion] = Field(title='Minions failed', default={})
+    status: TaskStatus = Field(title='Status', default=TaskStatus.created)
+
+    run_dt: Iso8601ZDatetime | None = Field(title='Run datetime', default=None)
+    stopped_dt: Iso8601ZDatetime | None = Field(title='Stopped datetime', default=None)
+    postprocessing_dt: Iso8601ZDatetime | None = Field(title='Postprocessing datetime', default=None)
+    finished_dt: Iso8601ZDatetime | None = Field(title='Finished datetime', default=None)
 
     postprocessing: TaskPostProcessing | None = Field(title='Postprocessing', default=None)
 

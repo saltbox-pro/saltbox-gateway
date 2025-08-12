@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import json
 import re
@@ -340,14 +341,31 @@ class ProxyService:
 
     async def _get_response_from_service(self, url: str) -> httpx.Response:
         headers = self._build_proxy_headers()
-        response = await self._httpx_client.request(
-            self._request_data.method,
-            url,
-            headers=headers,
-            params=self._request_data.query_params,
-            content=self._request_data.raw_body,
-            follow_redirects=True,
-        )
+        retries = SETTINGS.proxy_retries if self._request_data.method in SETTINGS.proxy_retry_idempotent_methods else 0
+        backoff = SETTINGS.proxy_retry_backoff_base
+        for attempt in range(retries + 1):
+            try:
+                response = await self._httpx_client.request(
+                    self._request_data.method,
+                    url,
+                    headers=headers,
+                    params=self._request_data.query_params,
+                    content=self._request_data.raw_body,
+                    follow_redirects=True,
+                )
+            except Exception as e:
+                if attempt < retries:
+                    await asyncio.sleep(backoff)
+                    backoff *= 2
+                    continue
+                raise ApiProxyRequestException(detail=str(e)) from e
+
+            if response.status_code in SETTINGS.proxy_retry_on_status and attempt < retries:
+                await asyncio.sleep(backoff)
+                backoff *= 2
+                continue
+            break
+
         if not response.is_success:
             detail = 'Unknown error occurred while processing the request.'
             if response.content and response.headers.get('content-type', '').startswith('application/json'):

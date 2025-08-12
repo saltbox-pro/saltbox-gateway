@@ -2,7 +2,6 @@ from typing import Any
 
 from httpx import AsyncClient
 
-# from pydantic import BaseModel
 from saltbox_gateway.config import SETTINGS, logger
 from saltbox_gateway.exceptions import OpaRequestException, OpaResponseFormatException
 from saltbox_gateway.utils.httpx_client import HttpxClientSingletoneFactory
@@ -12,14 +11,6 @@ from saltbox_gateway.utils.rego.sql_visitor import SQLQueryVisitor
 from saltbox_sdk.discovery_client.schemas import OPAQueryFilterFormat
 
 type Decision = dict[str, Any]
-
-
-# class CheckAccessInput(BaseModel):
-#     """Base model for check access input data."""
-#     object: AccessObject
-#     subject: AccessSubject
-#     request: ReqestObject
-#     environment: dict[str, Any] | None = None
 
 
 class AsyncOpaClient:
