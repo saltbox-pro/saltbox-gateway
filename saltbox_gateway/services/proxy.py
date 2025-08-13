@@ -135,8 +135,6 @@ class ProxyService:
                 opa_config=OPAConfig(
                     action='swagger',
                     policy='public',
-                    is_partial=False,
-                    query_filter_format=None,
                 ),
                 cache_ttl=0,  # Disable caching for docs
             )
@@ -153,16 +151,6 @@ class ProxyService:
             cached_response = await self._get_response_from_cache()
             if cached_response:
                 return cached_response
-
-        # Partial OPA check:
-        # 1) If the endpoint has a policy and is partial, check access
-        # 2) If OPA response allows, proceed with the proxy request
-
-        # Full OPA check:
-        # 1) If the endpoint has a policy and is not partial check method:
-        #     - If method is GET, proxy request and get response. Add response to OPA input and check access
-        #     - If method is not GET, add body to OPA input and check access
-        # 2) If OPA response allows, proceed with the proxy request
 
         # service_response = await self._get_response_from_service(url)
         service_response = await self._get_response_or_raise(
@@ -205,7 +193,7 @@ class ProxyService:
                 logger.debug(f'Added OPA query to request: {opa_response["query"]}')
 
         if not opa_config.is_partial:
-            if self._request_data.method == 'GET':
+            if self._request_data.method == 'GET' and opa_config.include_object:
                 service_response = await self._get_response_from_service(url)
                 logger.debug(f'Service response: {service_response.status_code} {service_response.text}')
                 try:
@@ -227,6 +215,9 @@ class ProxyService:
 
             if not opa_response.get('allow', False):
                 raise NotEnoughPermissionsException(service_name=service_name, path=path, action=opa_config.action)
+            if opa_response.get('query') is not None:
+                self._request_data.query_params.update({'opa_query': json.dumps(opa_response['query'])})
+                logger.debug(f'Added OPA query to request: {opa_response["query"]}')
         return service_response or await self._get_response_from_service(url)
 
     def _is_swagger_path(self, path: str, instance: ServiceInstance) -> bool:
