@@ -21,6 +21,7 @@ from saltbox_gateway.utils.redis_config import close_redis_pool, get_redis_conne
 from saltbox_sdk.exceptions import SaltBoxBaseException
 from saltbox_sdk.fastapi_utils.custom_openapi import custom_openapi, patch_swagger_config
 from saltbox_sdk.fastapi_utils.exception_handlers import custom_http_handler
+from saltbox_sdk.fastapi_utils.promethes_metrics.exporter import PrometheusExporter
 
 
 @asynccontextmanager
@@ -76,10 +77,11 @@ app.add_middleware(
     excluded_paths=[uri for uri in [app.docs_url, app.openapi_url, app.swagger_ui_oauth2_redirect_url] if uri]
     + [rf'/api/{module}/(docs|openapi\.json|docs/oauth2-redirect)$' for module in SETTINGS.official_modules]
     + [r'/static/(.*)']
+    + [r'/metrics']
     + [r'/api/discovery(?:/.*)?$']
     + [r'/api/core/system/[\w-]+/authorized_keys'],
 )
-
+PrometheusExporter(app).expose_metrics()
 app.add_exception_handler(SaltBoxBaseException, custom_http_handler)
 
 
