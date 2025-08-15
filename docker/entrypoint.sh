@@ -17,7 +17,7 @@ export REDIS_PASSWORD KEYCLOAK_CLIENT_SECRET
 
 if [ "$DEV_MODE" = 1 ]; then
     pip3 install --editable .[reload]
-    pip3 install --editable "${SALTBOX_SDK_SRC_PATH}"
+    pip3 install --editable "${SALTBOX_SDK_SRC_PATH}[mongo]"
 fi
 
 cmd_uvicorn() {
