@@ -69,9 +69,9 @@ openapi-scheme-generate:
     - apk add --cache-dir "$APK_CACHE_DIR" git
     - pip3 install -e .[dev]
   script:
-    - VERSION=$(python3 -c 'import saltbox_core; print(saltbox_core.__version__)')
+    - VERSION=$(python3 -c 'import saltbox_gateway; print(saltbox_core.__version__)')
     - echo "PYTHON_VERSION=$VERSION" > build.env
-    - python ./saltbox_core/utilities/generate_openapi.py
+    - python ./saltbox_gateway/utilities/generate_openapi.py
   artifacts:
     reports:
       dotenv: build.env
