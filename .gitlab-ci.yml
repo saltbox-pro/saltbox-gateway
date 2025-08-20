@@ -71,7 +71,7 @@ openapi-scheme-generate:
   script:
     - VERSION=$(python3 -c 'import saltbox_gateway; print(saltbox_gateway.__version__)')
     - echo "PYTHON_VERSION=$VERSION" > build.env
-    - python ./saltbox_gateway/utilities/generate_openapi.py
+    - python ./saltbox_gateway/utils/generate_openapi.py
   artifacts:
     reports:
       dotenv: build.env
