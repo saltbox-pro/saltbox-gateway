@@ -3,6 +3,10 @@
 stages:
   - lint
   - build
+  - generate-scheme
+  - generate-api-client
+  - deploy
+
 
 variables:
   # Set 0 to disable linting jobs
