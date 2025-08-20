@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from saltbox_core.main import app
+from saltbox_gateway.main import app
 
 
 def main() -> None:
