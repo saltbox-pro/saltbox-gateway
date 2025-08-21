@@ -4,11 +4,12 @@ from typing import Annotated
 from fastapi import Depends
 from redis.asyncio import ConnectionPool, Redis
 
-from saltbox_gateway.config import SETTINGS, logger
+from saltbox_sdk.config.redis_config import REDIS_SETTINGS
+from saltbox_sdk.config.logger_config import logger
 
 
 def _make_pool() -> ConnectionPool:
-    return ConnectionPool.from_url(SETTINGS.redis_url, **SETTINGS.redis_connection_kwargs)
+    return ConnectionPool.from_url(REDIS_SETTINGS.redis_url, **REDIS_SETTINGS.redis_connection_kwargs)
 
 
 async def close_redis_pool() -> None:

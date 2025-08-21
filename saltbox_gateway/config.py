@@ -1,11 +1,13 @@
 import logging.config
-from typing import Any, Literal
+import os
+from pathlib import Path
 
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 APP_NAME = 'Salt.Box Gateway'
 APP_DESC = 'Salt.Box Gateway and Service Discovery API'
+ENV_FILE = Path(os.environ.get('SALTBOX_ENV_FILE', '.env'))
 
 
 class Settings(BaseSettings):
@@ -17,11 +19,6 @@ class Settings(BaseSettings):
     basic_auth_username: str = ''
     basic_auth_password: str = ''
     origins: list[str] = Field(['*'], description='CORS allowed resources')
-    redis_ca_cert: str | None = Field(None, description='Path to file of concatenated PEM certs')
-    redis_password: str | None = None
-    redis_tls_verification: Literal['none', 'optional', 'required'] = 'required'
-    redis_url: str = ''
-    redis_username: str | None = None
     opa_url: str = ''
     official_modules: list[str] = ['core', 'processing', 'scheduler']
     service_registration_ttl: int = 3600
@@ -43,23 +40,7 @@ class Settings(BaseSettings):
     health_check_interval: int = 15
     health_check_timeout: int = 3
 
-    model_config = SettingsConfigDict(env_file='.env')
-
-    @property
-    def redis_connection_kwargs(self) -> dict[str, Any]:
-        """
-        Additional options for redis.*.from_url() group of methods
-        """
-        result = {
-            'username': self.redis_username,
-            'password': self.redis_password,
-        }
-        if self.redis_url.startswith('rediss:'):
-            result |= {
-                'ssl_cert_reqs': self.redis_tls_verification,
-                'ssl_ca_certs': self.redis_ca_cert,
-            }
-        return result
+    model_config = SettingsConfigDict(env_file=ENV_FILE)
 
 
 SETTINGS = Settings()
