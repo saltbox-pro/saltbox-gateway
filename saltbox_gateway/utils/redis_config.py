@@ -4,8 +4,8 @@ from typing import Annotated
 from fastapi import Depends
 from redis.asyncio import ConnectionPool, Redis
 
-from saltbox_sdk.config.redis_config import REDIS_SETTINGS
 from saltbox_sdk.config.logger_config import logger
+from saltbox_sdk.config.redis_config import REDIS_SETTINGS
 
 
 def _make_pool() -> ConnectionPool:
