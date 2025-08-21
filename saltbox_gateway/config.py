@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     health_check_interval: int = 15
     health_check_timeout: int = 3
 
-    model_config = SettingsConfigDict(env_file=ENV_FILE)
+    model_config = SettingsConfigDict(env_file=ENV_FILE, extra='ignore')
 
 
 SETTINGS = Settings()
