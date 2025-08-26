@@ -2,6 +2,7 @@ import asyncio
 import base64
 import json
 import re
+from collections import defaultdict
 from collections.abc import Callable
 from typing import Annotated
 
@@ -14,7 +15,6 @@ from saltbox_gateway.dao.service_dao import ServiceDAO, get_service_dao
 from saltbox_gateway.exceptions import (
     ApiProxyRequestException,
     NotEnoughPermissionsException,
-    # ProxyOpaClientInitializationError,
     ProxyStaticFileException,
     ServiceDisabledException,
     ServiceEndpointNotFoundException,
@@ -103,15 +103,22 @@ class ProxyService:
             headers.pop('content-type', None)
             headers.pop('content-length', None)
 
+        # Prepare query params with multiple values support
+        vals_by_key: dict[str, list[str]] = defaultdict(list)
+        for k, v in request.query_params.multi_items():
+            vals_by_key[k].append(v)
+        query_params = {k: vs[0] if len(vs) == 1 else vs for k, vs in vals_by_key.items()}
+
         request_data = ProxyRequestData(
             method=request.method.upper(),
             path=request.url.path.strip('/'),
-            query_params=dict(request.query_params),
+            query_params=query_params,
             headers=headers,
             body=body,
             raw_body=raw_body,
             user=request.state.user,
         )
+        logger.debug(f'Created ProxyRequestData: {request_data}')
         return cls(
             request_data=request_data,
             dao=dao,
@@ -165,6 +172,17 @@ class ProxyService:
 
         return service_response
 
+    def _add_query_param(self, key: str, value: str) -> None:
+        """Adds a query parameter, preserving multi-values."""
+        qp = self._request_data.query_params
+        if key in qp:
+            if isinstance(qp[key], list):
+                qp[key].append(value)
+            else:
+                qp[key] = [qp[key], value]
+        else:
+            qp[key] = value
+
     async def _get_response_or_raise(
         self, url: str, path: str, service_name: str, opa_config: OPAConfig
     ) -> httpx.Response:
@@ -192,7 +210,7 @@ class ProxyService:
         if not opa_response.get('allow', False):
             raise NotEnoughPermissionsException(service_name=service_name, path=path, action=opa_config.action)
         if opa_response.get('query') is not None:
-            self._request_data.query_params.update({'opa_query': json.dumps(opa_response['query'])})
+            self._add_query_param('opa_query', json.dumps(opa_response['query']))
             logger.debug(f'Added OPA query to request: {opa_response["query"]}')
 
         return await self._get_response_from_service(url)
