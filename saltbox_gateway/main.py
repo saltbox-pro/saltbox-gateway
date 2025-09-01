@@ -11,6 +11,7 @@ from saltbox_gateway import __version__
 from saltbox_gateway.config import APP_DESC, APP_NAME, SETTINGS, logger
 from saltbox_gateway.middlwares.authn import AuthMiddleware
 from saltbox_gateway.routers.discovery_router import router as discovery_router
+from saltbox_gateway.routers.permissions_router import router as permissions_router
 from saltbox_gateway.routers.proxy_router import router as proxy_router
 from saltbox_gateway.routers.static_proxy_router import router as static_proxy_router
 from saltbox_gateway.services.health_checker import get_health_checker_service
@@ -82,6 +83,7 @@ app.add_middleware(
 app.add_exception_handler(SaltBoxBaseException, custom_http_handler)
 
 
+app.include_router(permissions_router)
 app.include_router(discovery_router)
 app.include_router(proxy_router, include_in_schema=False)
 app.include_router(static_proxy_router, include_in_schema=False)

@@ -423,6 +423,31 @@ class ProxyService:
 
         return None
 
+    async def check_resources_permissions(self, service_name: str, paths: list[str]) -> dict:
+        result = {}
+        for path in paths:
+            endpoint = None
+            service = await self._get_service(service_name)
+            service_instance = await self._choose_healthy_instance(service)
+            if not service_instance.endpoints:
+                raise ServiceHasNoEndpointsException(service.name)
+
+            endpoint = await self._get_endpoint(service_instance.endpoints, path)
+
+            if not endpoint:
+                raise ServiceEndpointNotFoundException(service.name, path)
+
+            opa_config = endpoint.opa_config
+            input_data = await self._prepare_input_for_opa(service_name, path, action_name=opa_config.action)
+            opa_response = await self._opa_client.check_access(
+                package=opa_config.policy,
+                input=input_data,
+                is_partial=False,
+            )
+            result[path] = opa_response
+
+        return result
+
 
 async def get_proxy_service(
     request: Request,
