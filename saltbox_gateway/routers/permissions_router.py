@@ -24,6 +24,12 @@ async def check_service_permissions(
             'settings/sls-repos',
             'json-schemas',
             'tasks/template',
-        ]
+        ],
+        'scheduler': [
+            'tasks',
+            'task-templates',
+        ],
     }
-    return await proxy_service.check_resources_permissions(service_name=service_name, paths=service_paths[service_name])
+    return await proxy_service.check_resources_permissions(
+        service_name=service_name, paths=service_paths.get(service_name, [])
+    )
