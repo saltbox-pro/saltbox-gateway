@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     basic_auth_password: str = ''
     origins: list[str] = Field(['*'], description='CORS allowed resources')
     opa_url: str = ''
-    official_modules: list[str] = ['core', 'processing', 'scheduler']
+    official_modules: list[str] = ['core', 'processing', 'scheduler', 'inventory']
     service_registration_ttl: int = 3600
     proxy_request_timeout: int = 10
     # granular HTTPX timeouts
