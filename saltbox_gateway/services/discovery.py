@@ -61,8 +61,6 @@ class DiscoveryService:
     async def get_service_by_name(self, service_name: str) -> ServiceSchema:
         """Get a service by its name."""
         service_data = await self._dao.get(service_name)
-        service = self._to_service_schema(service_data)
-        logger.debug(f'EP: {service.instances[0].endpoints[26]}')
         return self._to_service_schema(service_data)
 
     async def get_all_services(self) -> list[ServiceSchema]:
