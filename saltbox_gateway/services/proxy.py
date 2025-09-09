@@ -378,7 +378,7 @@ class ProxyService:
             params=self._request_data.query_params,
         )
 
-        if static_response.status_code != 200:
+        if static_response.is_error:
             raise ProxyStaticFileException(
                 detail=f'Failed to fetch static file from `{url}`. Status code: {static_response.status_code}'
             )
