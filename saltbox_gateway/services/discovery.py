@@ -138,7 +138,7 @@ class DiscoveryService:
                 redirect_uri=f'{SETTINGS.server_scheme}://{SETTINGS.server_outer_socket}',
                 client_secret=KC_SETTINGS.client_secret,
             ),
-            services=[service.front_config for service in services],
+            services=[service.front_config for service in services if service.enabled],
         )
 
         return config
