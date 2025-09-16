@@ -52,7 +52,9 @@ class DiscoveryService:
                 existing_service_data = await self._dao.get(service.name)
 
                 existing_service = ServiceSchema(**existing_service_data.get('data', {}))
-                updated_service = await self._add_instance_to_service(existing_service, service.instances)
+                # updated_service = await self._add_instance_to_service(existing_service, service.instances)
+                updated_instances = await self._merge_instances(existing_service.instances, service.instances)
+                updated_service = service.model_copy(update={'instances': updated_instances})
 
                 created_data = await self._dao.update(updated_service.model_dump())
 
@@ -90,18 +92,14 @@ class DiscoveryService:
 
             await self._dao.update(updated_service)
 
-    async def _add_instance_to_service(self, service: ServiceSchema, instances: list[ServiceInstance]) -> ServiceSchema:
-        """Add instances to a service, merging with existing instances."""
-        logger.debug(f'Adding instances to service: {service.name}')
-        logger.debug(f'Existing instances: {[inst.host for inst in service.instances]}')
-        logger.debug(f'New instances: {[inst.host for inst in instances]}')
-
-        merged_instances = {inst.id: inst for inst in service.instances}
-        for instance in instances:
+    async def _merge_instances(
+        self, current_instances: list[ServiceInstance], new_instances: list[ServiceInstance]
+    ) -> list[ServiceInstance]:
+        merged_instances = {inst.id: inst for inst in current_instances}
+        for instance in new_instances:
             merged_instances[instance.id] = instance
 
-        updated_service = service.model_copy(update={'instances': list(merged_instances.values())})
-        return updated_service
+        return list(merged_instances.values())
 
     async def toggle_service(self, service_name: str, enable: bool) -> ServiceSchema:
         """Enable or disable a service."""
