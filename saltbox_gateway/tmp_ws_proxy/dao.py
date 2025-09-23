@@ -41,6 +41,8 @@ class JobDao:
                 'arg': json.loads(job_data[b'arg']) if b'arg' in job_data else None,
                 'kwarg': json.loads(job_data[b'kwarg']) if b'kwarg' in job_data else None,
                 'status': JobModel.JobStatus.in_queue,
+                'user': json.loads(job_data[b'user'].decode()) if b'user' in job_data else None,
+                'system_user': job_data[b'system_user'].decode() if b'system_user' in job_data else None,
             }
         return None
 

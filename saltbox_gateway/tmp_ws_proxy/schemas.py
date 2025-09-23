@@ -21,6 +21,7 @@ from saltbox_gateway.tmp_ws_proxy.utils import (
     make_aware,
     utc_now,
 )
+from saltbox_sdk.db.schemas_base import SYSTEM_SHORT_USER, UserShort
 
 T = TypeVar('T')
 JID_T = TypeVar('JID_T', str, int)
@@ -54,7 +55,8 @@ class JobModel(BaseModel):
     jid: StrJid
     tgt: str | list[str]
     tgt_type: str
-    user: str | None = None
+    user: UserShort | None = Field(default=SYSTEM_SHORT_USER)
+    system_user: str | None = None
     fun: str
     arg: list | None = None
     kwarg: dict | None = None
@@ -118,12 +120,6 @@ class JobResult(BaseModel):
 class TaskData(BaseModel):  # type: ignore[no-redef]
     args: list | None = Field(default=None)
     kwargs: dict | None = Field(default=None)
-
-
-class UserShort(BaseModel):
-    sub: str
-    name: str
-    email: str
 
 
 class TaskJobReturnStatus(str, Enum):
