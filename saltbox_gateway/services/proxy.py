@@ -2,6 +2,7 @@ import asyncio
 import base64
 import json
 import re
+import time
 from collections import defaultdict
 from collections.abc import Callable
 from typing import Annotated
@@ -47,6 +48,7 @@ class ProxyService:
         self._httpx_client = httpx_client or httpx.AsyncClient(timeout=SETTINGS.proxy_request_timeout)
         self._opa_client = opa_client
         self._cache = cache
+        self._server_timing: dict[str, float] = {}
 
     @classmethod
     async def create(
@@ -170,6 +172,10 @@ class ProxyService:
         if endpoint.cache_ttl > 0 and self._is_response_cachable(service_response):
             await self._add_response_to_cache(service_response, endpoint.cache_ttl)
 
+        if self._server_timing:
+            service_response.headers['Server-Timing'] = ', '.join(
+                f'{k + "_" + service_name if k == "service" else k};dur={v}' for k, v in self._server_timing.items()
+            )
         return service_response
 
     def _add_query_param(self, key: str, value: str) -> None:
@@ -189,6 +195,7 @@ class ProxyService:
         if not opa_config.policy or opa_config.policy == 'public':
             return await self._get_response_from_service(url)
 
+        opa_response_timer_start = time.perf_counter()
         input_data = await self._prepare_input_for_opa(service_name, path, action_name=opa_config.action)
 
         if opa_config.is_partial:
@@ -212,6 +219,9 @@ class ProxyService:
         if opa_response.get('query') is not None:
             self._add_query_param('opa_query', json.dumps(opa_response['query']))
             logger.debug(f'Added OPA query to request: {opa_response["query"]}')
+
+        opa_response_timer_end = time.perf_counter()
+        self._server_timing['opa'] = round((opa_response_timer_end - opa_response_timer_start) * 1000, 2)
 
         return await self._get_response_from_service(url)
 
@@ -323,6 +333,7 @@ class ProxyService:
         return headers
 
     async def _get_response_from_service(self, url: str) -> httpx.Response:
+        service_response_timer_start = time.perf_counter()
         headers = self._build_proxy_headers()
         retries = SETTINGS.proxy_retries if self._request_data.method in SETTINGS.proxy_retry_idempotent_methods else 0
         backoff = SETTINGS.proxy_retry_backoff_base
@@ -348,6 +359,9 @@ class ProxyService:
                 backoff *= 2
                 continue
             break
+
+        service_response_timer_end = time.perf_counter()
+        self._server_timing['service'] = round((service_response_timer_end - service_response_timer_start) * 1000, 2)
 
         if not response.is_success:
             detail = 'Unknown error occurred while processing the request.'

@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from saltbox_gateway import __version__
 from saltbox_gateway.config import APP_DESC, APP_NAME, SETTINGS, logger
 from saltbox_gateway.middlwares.authn import AuthMiddleware
+from saltbox_gateway.middlwares.request_id import RequestIDMiddleware
 from saltbox_gateway.routers.discovery_router import router as discovery_router
 from saltbox_gateway.routers.permissions_router import router as permissions_router
 from saltbox_gateway.routers.proxy_router import router as proxy_router
@@ -62,6 +63,7 @@ app_config = patch_swagger_config(app_config)
 
 app = FastAPI(**app_config)
 
+app.add_middleware(RequestIDMiddleware)
 
 app.add_middleware(
     CORSMiddleware,

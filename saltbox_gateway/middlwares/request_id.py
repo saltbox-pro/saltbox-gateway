@@ -1,3 +1,4 @@
+import time
 from collections.abc import Callable
 from contextvars import ContextVar
 from typing import Any
@@ -29,16 +30,26 @@ def get_request_id() -> str | None:
 
 class RequestIDMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
+        full_request_timer_start = time.perf_counter()
         req_id = request.headers.get('X-Request-Id') or request.headers.get('X-Request-ID')
         if not req_id:
             req_id = uuid4().hex
-        # put into state for downstream use
         request.state.request_id = req_id
         token = set_request_id(req_id)
         try:
             response: Response = await call_next(request)
         finally:
             reset_request_id(token)
+        full_request_timer_end = time.perf_counter()
         if 'X-Request-Id' not in response.headers and 'X-Request-ID' not in response.headers:
             response.headers['X-Request-Id'] = req_id
+        # Добавляем Server-Timing, если не установлен
+        if 'Server-Timing' not in response.headers:
+            response.headers['Server-Timing'] = (
+                f'fullproxy;dur={round((full_request_timer_end - full_request_timer_start) * 1000, 2)}'
+            )
+        else:
+            response.headers['Server-Timing'] += (
+                f', fullproxy;dur={round((full_request_timer_end - full_request_timer_start) * 1000, 2)}'
+            )
         return response
