@@ -309,3 +309,16 @@ class TaskModel(BaseModel):
 
     created: Iso8601ZDatetime = Field(title='Created')
     modified: Iso8601ZDatetime = Field(title='Modified')
+
+    @computed_field(title='Total minions')
+    def total_minions(self) -> int:
+        return len(self.minions)
+
+    @computed_field(title='Minions count by status')
+    def minions_count_by_status(self) -> dict[TaskMinionStatus, int]:
+        result: dict[TaskMinionStatus, int] = dict.fromkeys(TaskMinionStatus, 0)
+
+        for minion in self.minions.values():
+            result[minion.status] += 1
+
+        return result
