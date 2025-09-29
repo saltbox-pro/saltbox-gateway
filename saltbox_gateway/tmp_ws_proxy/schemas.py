@@ -55,6 +55,7 @@ class JobModel(BaseModel):
     jid: StrJid
     tgt: str | list[str]
     tgt_type: str
+    salt_master: str
     user: UserShort | None = Field(default=SYSTEM_SHORT_USER)
     system_user: str | None = None
     fun: str
