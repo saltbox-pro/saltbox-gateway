@@ -123,6 +123,11 @@ class TaskData(BaseModel):  # type: ignore[no-redef]
     kwargs: dict | None = Field(default=None)
 
 
+class TaskSource(BaseModel):
+    type: str = Field(title='Source type')
+    id: str | None = Field(title='Source id', default=None)
+
+
 class TaskJobReturnStatus(str, Enum):
     succeeded = 'succeeded'
     failed = 'failed'
@@ -307,6 +312,7 @@ class TaskModel(BaseModel):
     max_retries: int = Field(title='Max retries', ge=1, default=3)
 
     user: UserShort
+    source: TaskSource | None = Field(title='Source', default=None)
 
     created: Iso8601ZDatetime = Field(title='Created')
     modified: Iso8601ZDatetime = Field(title='Modified')
