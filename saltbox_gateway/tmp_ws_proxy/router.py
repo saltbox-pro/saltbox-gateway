@@ -1,6 +1,7 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, WebSocket
+from redis.asyncio import Redis
 
 from saltbox_gateway.config import logger
 from saltbox_gateway.exceptions import SecureWebSocketPolicyException
@@ -10,30 +11,36 @@ from saltbox_gateway.tmp_ws_proxy.errors import JobDoesNotExistsException
 from saltbox_gateway.tmp_ws_proxy.schemas import IntJid, JobModel, JobResult, TaskModel
 from saltbox_gateway.tmp_ws_proxy.utils import JID
 from saltbox_gateway.utils.opa_client import get_opa_client
-from saltbox_gateway.utils.redis_config import RedisDependency
 from saltbox_gateway.utils.secure_websocket import PubSubAuthenticatedWebSocket
+from saltbox_sdk.db.redis.config import get_redis
 
 ws_core_jobs_router = APIRouter(prefix='/api/core/jobs')
 ws_core_tasks_router = APIRouter(prefix='/api/core/tasks')
 
 
 @ws_core_jobs_router.websocket('')
-async def jobs_rets_websocket(websocket: WebSocket, rdb: RedisDependency) -> None:
-    def job_new_handler(data: dict) -> str:
-        return JobModel(**{'status': JobModel.JobStatus.started, **data}).model_dump_json(by_alias=True)
-
+async def jobs_rets_websocket(
+    websocket: WebSocket,
+    rdb: Annotated[Redis, Depends(get_redis)],
+) -> None:
     secure_websocket = PubSubAuthenticatedWebSocket(websocket, rdb)
-    await secure_websocket.handle_pubsub({'job:*:new': job_new_handler})
+    await secure_websocket.handle_pubsub(
+        {
+            'job:*:create': JobModel,
+            'job:*:update': JobModel,
+        }
+    )
 
 
 @ws_core_jobs_router.websocket('/{jid}/return')
 async def jobs_endpoint_websocket(
     jid: IntJid,
     websocket: WebSocket,
-    rdb: RedisDependency,
+    rdb: Annotated[Redis, Depends(get_redis)],
+    discovery: Annotated[DiscoveryService, Depends(get_discovery_service)],
 ) -> None:
     _jid = JID(jid)
-    job_service = JobDao(rdb)
+    job_service = JobDao(discovery)
 
     try:
         await job_service.get_job(_jid)
@@ -42,11 +49,19 @@ async def jobs_endpoint_websocket(
         raise SecureWebSocketPolicyException(msg) from e
 
     secure_websocket = PubSubAuthenticatedWebSocket(websocket, rdb)
-    await secure_websocket.handle_pubsub({f'job:{jid}:return': JobResult})
+    await secure_websocket.handle_pubsub(
+        {
+            f'job:{jid}:return:create': JobResult,
+            f'job:{jid}:return:update': JobResult,
+        }
+    )
 
 
 @ws_core_tasks_router.websocket('')
-async def tasks_websocket(websocket: WebSocket, rdb: RedisDependency) -> None:
+async def tasks_websocket(
+    websocket: WebSocket,
+    rdb: Annotated[Redis, Depends(get_redis)],
+) -> None:
     secure_websocket = PubSubAuthenticatedWebSocket(websocket, rdb)
     await secure_websocket.handle_pubsub(
         {
@@ -60,11 +75,11 @@ async def tasks_websocket(websocket: WebSocket, rdb: RedisDependency) -> None:
 async def task_websocket(
     tid: str,
     websocket: WebSocket,
-    rdb: RedisDependency,
+    rdb: Annotated[Redis, Depends(get_redis)],
     discovery: Annotated[DiscoveryService, Depends(get_discovery_service)],
 ) -> None:
-    task_service = TaskDao(rdb, discovery)
-    task = await task_service.get(tid=tid)
+    task_service = TaskDao(discovery)
+    task = await task_service.get_task(tid=tid)
 
     logger.warning(f'Task {tid} found: {task}')
 
@@ -72,14 +87,13 @@ async def task_websocket(
         msg = f'Task not found by ID={tid}'
         raise SecureWebSocketPolicyException(msg)
 
-    def job_new_handler(data: dict) -> str:
-        return JobModel(**{'status': JobModel.JobStatus.started, **data}).model_dump_json(by_alias=True)
-
     secure_websocket = PubSubAuthenticatedWebSocket(websocket, rdb)
     await secure_websocket.handle_pubsub(
         {
-            f'task:{tid}:job:*:return': JobResult,
-            f'task:{tid}:job:*:new': job_new_handler,
+            f'task:{tid}:job:*:return:create': JobResult,
+            f'task:{tid}:job:*:return:update': JobResult,
+            f'task:{tid}:job:*:create': JobModel,
+            f'task:{tid}:job:*:update': JobModel,
             f'task:{tid}:update': TaskModel,
         }
     )
@@ -87,7 +101,10 @@ async def task_websocket(
 
 # New WebSocket endpoint implementation (temporary not used)
 @ws_core_tasks_router.websocket('/new')
-async def tasks_websocket_new(websocket: WebSocket, rdb: RedisDependency) -> None:
+async def tasks_websocket_new(
+    websocket: WebSocket,
+    rdb: Annotated[Redis, Depends(get_redis)],
+) -> None:
     opa_client = get_opa_client()
     secure_websocket = PubSubAuthenticatedWebSocket(websocket, rdb)
     if not secure_websocket.user:

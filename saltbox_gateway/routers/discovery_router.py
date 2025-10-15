@@ -1,6 +1,7 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Body, Depends
+from redis.asyncio import Redis
 
 from saltbox_gateway.config import logger
 from saltbox_gateway.exceptions import DiscoveryServiceException
@@ -8,7 +9,7 @@ from saltbox_gateway.schemas import (
     DiscoveryServiceConfig,
 )
 from saltbox_gateway.services.discovery import DiscoveryService, get_discovery_service
-from saltbox_gateway.utils.redis_config import RedisDependency
+from saltbox_sdk.db.redis.config import get_redis
 from saltbox_sdk.discovery_client.schemas import (
     DiscoveryResponse,
     ProxyBalancingStrategy,
@@ -19,7 +20,9 @@ router = APIRouter(prefix='/api/discovery', tags=['Discovery'])
 
 
 @router.get('/health')
-async def health_check(redis: RedisDependency) -> dict:
+async def health_check(
+    redis: Annotated[Redis, Depends(get_redis)],
+) -> dict:
     """Health check для API Gateway"""
     try:
         pong = await redis.ping()

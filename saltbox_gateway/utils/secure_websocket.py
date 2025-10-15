@@ -187,7 +187,7 @@ class PubSubAuthenticatedWebSocket(AuthenticatedWebSocket):
     async def channel_forwarder(websocket: WebSocket, rdb: RedisDependency) -> None:
         secure_websocket = PubSubAuthenticatedWebSocket(websocket, rdb)
 
-        await secure_websocket.handle_pubsub({'job:*:new': Job, 'channel2': AnotherModel})
+        await secure_websocket.handle_pubsub({'job:*:create': Job, 'channel2': AnotherModel})
     """
 
     def __init__(self, websocket: WebSocket, rdb: Redis) -> None:

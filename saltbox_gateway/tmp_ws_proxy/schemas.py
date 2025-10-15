@@ -21,7 +21,7 @@ from saltbox_gateway.tmp_ws_proxy.utils import (
     make_aware,
     utc_now,
 )
-from saltbox_sdk.db.schemas_base import SYSTEM_SHORT_USER, UserShort
+from saltbox_sdk.db.schemas_base import SYSTEM_SHORT_USER, Source, UserShort
 
 T = TypeVar('T')
 JID_T = TypeVar('JID_T', str, int)
@@ -47,11 +47,14 @@ JobData = dict[str, Any]
 JOB_CREATE_HASH_NAME: str = 'job_create:{jid}'
 
 
-class JobModel(BaseModel):
-    class JobStatus(str, Enum):
-        in_queue = 'in_queue'
-        started = 'started'
+class JobStatus(StrEnum):
+    in_queue = 'in_queue'
+    started = 'started'
+    waiting_returns = 'waiting_returns'
+    finished = 'finished'
 
+
+class JobModel(BaseModel):
     jid: StrJid
     tgt: str | list[str]
     tgt_type: str
@@ -65,6 +68,7 @@ class JobModel(BaseModel):
     missing: list[str] = []
     stamp: str | None = Field(alias='_stamp', default=None)
     status: JobStatus = JobStatus.started
+    source: Source | None = None
 
     @computed_field(title='Timestamp decoded from JID')
     def fms_jid_timestamp(self) -> Annotated[datetime, PastDatetime]:
@@ -102,6 +106,7 @@ class JobResult(BaseModel):
     fun_kwarg: dict | None = None
     user: str | None = None
     stamp: str = Field(alias='_stamp')
+    source: Source | None = None
 
     @model_validator(mode='before')
     @classmethod
