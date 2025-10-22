@@ -8,7 +8,7 @@ from saltbox_gateway.exceptions import SecureWebSocketPolicyException
 from saltbox_gateway.services.discovery import DiscoveryService, get_discovery_service
 from saltbox_gateway.tmp_ws_proxy.dao import JobDao, TaskDao
 from saltbox_gateway.tmp_ws_proxy.errors import JobDoesNotExistsException
-from saltbox_gateway.tmp_ws_proxy.schemas import IntJid, JobModel, JobResult, TaskModel
+from saltbox_gateway.tmp_ws_proxy.schemas import IntJid, JobModel, JobReturnModel, TaskModel
 from saltbox_gateway.tmp_ws_proxy.utils import JID
 from saltbox_gateway.utils.opa_client import get_opa_client
 from saltbox_gateway.utils.secure_websocket import PubSubAuthenticatedWebSocket
@@ -51,8 +51,8 @@ async def jobs_endpoint_websocket(
     secure_websocket = PubSubAuthenticatedWebSocket(websocket, rdb)
     await secure_websocket.handle_pubsub(
         {
-            f'job:{jid}:return:create': JobResult,
-            f'job:{jid}:return:update': JobResult,
+            f'job-return:{jid}:create': JobReturnModel,
+            f'job-return:{jid}:update': JobReturnModel,
         }
     )
 
@@ -90,8 +90,8 @@ async def task_websocket(
     secure_websocket = PubSubAuthenticatedWebSocket(websocket, rdb)
     await secure_websocket.handle_pubsub(
         {
-            f'task:{tid}:job:*:return:create': JobResult,
-            f'task:{tid}:job:*:return:update': JobResult,
+            f'task:{tid}:job-return:*:create': JobReturnModel,
+            f'task:{tid}:job-return:*:update': JobReturnModel,
             f'task:{tid}:job:*:create': JobModel,
             f'task:{tid}:job:*:update': JobModel,
             f'task:{tid}:update': TaskModel,

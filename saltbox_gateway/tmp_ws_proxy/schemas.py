@@ -21,7 +21,7 @@ from saltbox_gateway.tmp_ws_proxy.utils import (
     make_aware,
     utc_now,
 )
-from saltbox_sdk.db.schemas_base import SYSTEM_SHORT_USER, Source, UserShort
+from saltbox_sdk.db.schemas_base import SYSTEM_SHORT_USER, CreatedModifiedMixin, Source, UserShort
 
 T = TypeVar('T')
 JID_T = TypeVar('JID_T', str, int)
@@ -54,7 +54,7 @@ class JobStatus(StrEnum):
     finished = 'finished'
 
 
-class JobModel(BaseModel):
+class JobModel(BaseModel, CreatedModifiedMixin):
     jid: StrJid
     tgt: str | list[str]
     tgt_type: str
@@ -86,7 +86,7 @@ class JobModel(BaseModel):
         return data
 
 
-class JobResult(BaseModel):
+class JobReturnModel(BaseModel, CreatedModifiedMixin):
     """
     Describes return data for a job
     """
@@ -96,17 +96,18 @@ class JobResult(BaseModel):
     model_config = ConfigDict(extra='allow')
 
     id: str
-    success: bool
+
+    minion_id: str
     salt_master: str
-    return_: Any = Field(alias='return')
     retcode: int
     jid: StrJid
     fun: str
     fun_args: list | None = None
     fun_kwarg: dict | None = None
     user: str | None = None
-    stamp: str = Field(alias='_stamp')
+    stamp: str
     source: Source | None = None
+    data: Any | None = None
 
     @model_validator(mode='before')
     @classmethod
