@@ -64,8 +64,9 @@ class JobModel(BaseModel, CreatedModifiedMixin):
     fun: str
     arg: list | None = None
     kwarg: dict | None = None
-    minions: list[str] = []
-    missing: list[str] = []
+    minions: list[str] = Field(default=[])
+    missing: list[str] = Field(default=[])
+    returning: dict[str, bool | None] = Field(default={})
     stamp: str | None = Field(alias='_stamp', default=None)
     status: JobStatus = JobStatus.started
     source: Source | None = None
