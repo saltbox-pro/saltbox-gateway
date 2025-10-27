@@ -3,11 +3,9 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, WebSocket
 from redis.asyncio import Redis
 
-from saltbox_gateway.config import logger
 from saltbox_gateway.exceptions import SecureWebSocketPolicyException
 from saltbox_gateway.services.discovery import DiscoveryService, get_discovery_service
 from saltbox_gateway.tmp_ws_proxy.dao import JobDao, TaskDao
-from saltbox_gateway.tmp_ws_proxy.errors import JobDoesNotExistsException
 from saltbox_gateway.tmp_ws_proxy.schemas import IntJid, JobModel, JobReturnModel, TaskModel
 from saltbox_gateway.tmp_ws_proxy.utils import JID
 from saltbox_gateway.utils.opa_client import get_opa_client
@@ -32,6 +30,30 @@ async def jobs_rets_websocket(
     )
 
 
+@ws_core_jobs_router.websocket('/{jid}/info')
+async def job_info_endpoint_websocket(
+    jid: IntJid,
+    websocket: WebSocket,
+    rdb: Annotated[Redis, Depends(get_redis)],
+    discovery: Annotated[DiscoveryService, Depends(get_discovery_service)],
+) -> None:
+    _jid = JID(jid)
+    job_service = JobDao(discovery)
+    job = job_service.get_job(_jid)
+
+    if not job:
+        msg = f'Job not found by JID={jid}'
+        raise SecureWebSocketPolicyException(msg)
+
+    secure_websocket = PubSubAuthenticatedWebSocket(websocket, rdb)
+    await secure_websocket.handle_pubsub(
+        {
+            f'job:{jid}:create': JobModel,
+            f'job:{jid}:update': JobModel,
+        }
+    )
+
+
 @ws_core_jobs_router.websocket('/{jid}/return')
 async def jobs_endpoint_websocket(
     jid: IntJid,
@@ -41,12 +63,11 @@ async def jobs_endpoint_websocket(
 ) -> None:
     _jid = JID(jid)
     job_service = JobDao(discovery)
+    job = job_service.get_job(_jid)
 
-    try:
-        await job_service.get_job(_jid)
-    except JobDoesNotExistsException as e:
+    if not job:
         msg = f'Job not found by JID={jid}'
-        raise SecureWebSocketPolicyException(msg) from e
+        raise SecureWebSocketPolicyException(msg)
 
     secure_websocket = PubSubAuthenticatedWebSocket(websocket, rdb)
     await secure_websocket.handle_pubsub(
@@ -80,8 +101,6 @@ async def task_websocket(
 ) -> None:
     task_service = TaskDao(discovery)
     task = await task_service.get_task(tid=tid)
-
-    logger.warning(f'Task {tid} found: {task}')
 
     if not task:
         msg = f'Task not found by ID={tid}'
