@@ -105,8 +105,10 @@ class JobReturnModel(BaseModel, CreatedModifiedMixin):
     fun: str
     fun_args: list | None = None
     fun_kwarg: dict | None = None
-    user: str | None = None
-    stamp: str
+    user: UserShort | None = Field(default=SYSTEM_SHORT_USER)
+    system_user: str | None = None
+    stamp: str | None = None
+    stamp_job: str | None = None
     source: Source | None = None
     data: Any | None = None
 
