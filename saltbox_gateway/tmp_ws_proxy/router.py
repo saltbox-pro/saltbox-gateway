@@ -6,7 +6,7 @@ from redis.asyncio import Redis
 from saltbox_gateway.exceptions import SecureWebSocketPolicyException
 from saltbox_gateway.services.discovery import DiscoveryService, get_discovery_service
 from saltbox_gateway.tmp_ws_proxy.dao import JobDao, TaskDao
-from saltbox_gateway.tmp_ws_proxy.schemas import IntJid, JobModel, JobReturnModel, TaskModel
+from saltbox_gateway.tmp_ws_proxy.schemas import IntJid, JobModel, JobReturnModel, TaskMinionModel, TaskModel
 from saltbox_gateway.tmp_ws_proxy.utils import JID
 from saltbox_gateway.utils.opa_client import get_opa_client
 from saltbox_gateway.utils.secure_websocket import PubSubAuthenticatedWebSocket, PubSubMessageHandler
@@ -113,6 +113,8 @@ async def task_websocket(
             PubSubMessageHandler(f'task:{tid}:job-return:*:update', 'job-return', schema=JobReturnModel),
             PubSubMessageHandler(f'task:{tid}:job:*:create', 'job', schema=JobModel),
             PubSubMessageHandler(f'task:{tid}:job:*:update', 'job', schema=JobModel),
+            PubSubMessageHandler(f'task:{tid}:task-minion:*:create', 'task-minion', schema=TaskMinionModel),
+            PubSubMessageHandler(f'task:{tid}:task-minion:*:update', 'task-minion', schema=TaskMinionModel),
             PubSubMessageHandler(f'task:{tid}:update', 'task', schema=TaskModel),
         ]
     )
