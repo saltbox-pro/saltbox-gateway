@@ -4,7 +4,6 @@ import functools
 import json
 from collections.abc import Callable
 from contextlib import AbstractContextManager
-from inspect import isclass
 from types import TracebackType
 from typing import Any, TypedDict, cast
 
@@ -179,6 +178,71 @@ class AuthenticatedWebSocket:
             await self.websocket.close(code=1008, reason=msg)
 
 
+class PubSubMessageHandler:
+    def __init__(
+        self,
+        channel: str,
+        message_tag: str,
+        *,
+        send_empty: bool = False,
+        schema: type[BaseModel] | None = None,
+        callback: Callable | None = None,
+    ) -> None:
+        self.channel = channel
+        self.message_tag = message_tag
+        self.send_empty = send_empty
+
+        if schema is None and callback is None:
+            msg = 'Must provide schema or callback'
+            raise ValueError(msg)
+        elif schema is not None and callback is not None:
+            msg = 'Must provide only schema or only callback at same time'
+            raise ValueError(msg)
+
+        self.schema = schema
+        self.callback = callback
+
+    async def _handle_message_by_schema(self, message: RedisPubSubMessage) -> Any:
+        if self.schema is None:
+            msg = 'Must provide schema'
+            raise ValueError(msg)
+
+        data_str = message['data'].decode()
+        try:
+            data = json.loads(data_str)
+            instance = self.schema(**data)
+            return instance.model_dump(by_alias=True, mode='json')
+        except (ValidationError, TypeError, json.JSONDecodeError) as e:
+            logger.error('Error processing pubsub message %s', e)
+
+        return None
+
+    async def _handle_message_by_callback(self, message: RedisPubSubMessage) -> Any:
+        if self.callback is None:
+            msg = 'Must provide callback'
+            raise ValueError(msg)
+
+        data_str = message['data'].decode()
+        try:
+            data = json.loads(data_str)
+            result = self.callback(data=data)
+
+            if result is not None:
+                return result
+        except (ValidationError, TypeError, json.JSONDecodeError) as e:
+            logger.error('Error processing pubsub message %s', e)
+
+        return None
+
+    async def handle_message(self, message: RedisPubSubMessage) -> Any:
+        if self.schema:
+            return await self._handle_message_by_schema(message)
+        elif self.callback:
+            return await self._handle_message_by_callback(message)
+
+        return None
+
+
 class PubSubAuthenticatedWebSocket(AuthenticatedWebSocket):
     """WebSocket connection for PubSub messages forwarding
 
@@ -194,32 +258,10 @@ class PubSubAuthenticatedWebSocket(AuthenticatedWebSocket):
         super().__init__(websocket)
         self._rdb = rdb
 
-    async def _process_channel_message(self, message: RedisPubSubMessage, schema: type[BaseModel]) -> None:
-        data_str = message['data'].decode()
-        try:
-            data = json.loads(data_str)
-            instance = schema(**data)
-            await self.send_text(instance.model_dump_json(by_alias=True))
-        except (ValidationError, TypeError, json.JSONDecodeError) as e:
-            logger.error('Error processing pubsub message %s', e)
-
-    async def _process_channel_message_by_callback(self, message: RedisPubSubMessage, callback: Callable) -> None:
-        data_str = message['data'].decode()
-        try:
-            data = json.loads(data_str)
-            result = callback(data=data)
-
-            if result is not None:
-                if isinstance(result, str):
-                    await self.send_text(result)
-                else:
-                    await self.send_text(json.dumps(result))
-        except (ValidationError, TypeError, json.JSONDecodeError) as e:
-            logger.error('Error processing pubsub message %s', e)
-
-    async def _message_forwarder(self, channel: str, handler: type[BaseModel] | Callable) -> None:
+    async def _message_forwarder(self, handler: PubSubMessageHandler) -> None:
         async with self._rdb.pubsub() as pubsub:
-            await pubsub.psubscribe(channel)
+            logger.warning(handler)
+            await pubsub.psubscribe(handler.channel)
             async for message in pubsub.listen():
                 if self._already_closed:
                     logger.debug('Cant forward msg - Websocket already closed')
@@ -227,23 +269,18 @@ class PubSubAuthenticatedWebSocket(AuthenticatedWebSocket):
                 if message['type'] not in PubSub.PUBLISH_MESSAGE_TYPES:
                     continue
 
-                if isclass(handler) and issubclass(handler, BaseModel):
-                    await self._process_channel_message(message, handler)
-                    continue
-                elif callable(handler):
-                    await self._process_channel_message_by_callback(message, handler)
-                    continue
-                else:
-                    msg: str = f'Unsupported handler type {handler.__name__}'  # type: ignore
-                    raise Exception(msg)
+                handler_result = await handler.handle_message(message)
+
+                if handler_result or handler.send_empty:
+                    await self.send_text(json.dumps({'message_tag': handler.message_tag, 'payload': handler_result}))
 
         logger.debug('Exit from _message_forwarder')
 
-    async def handle_pubsub(self, channel_schema_map: dict[str, type[BaseModel] | Callable]) -> None:
+    async def handle_pubsub(self, handlers: list[PubSubMessageHandler]) -> None:
         await self.accept()
         channel_tasks = []
-        for channel, handler in channel_schema_map.items():
-            task = asyncio.create_task(self._message_forwarder(channel, handler))
+        for handler in handlers:
+            task = asyncio.create_task(self._message_forwarder(handler))
             channel_tasks.append(task)
             self._subtasks.add(task)
 

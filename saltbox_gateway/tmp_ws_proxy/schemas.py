@@ -1,6 +1,6 @@
 from datetime import datetime
-from enum import Enum, StrEnum
-from typing import Annotated, Any, Self, TypeVar
+from enum import StrEnum
+from typing import Annotated, Any, TypeVar
 
 from pydantic import (
     AfterValidator,
@@ -14,14 +14,13 @@ from pydantic import (
 )
 
 from saltbox_gateway.tmp_ws_proxy.errors import JidError
-from saltbox_gateway.tmp_ws_proxy.utils import (
-    JID,
-    fill_salt_kwarg_from_arg,
-    format_iso8601_z,
-    make_aware,
-    utc_now,
-)
+from saltbox_gateway.tmp_ws_proxy.utils import JID, fill_salt_kwarg_from_arg
+from saltbox_sdk.db.mongo.schemas_base import IDMixin, PyObjectId
 from saltbox_sdk.db.schemas_base import SYSTEM_SHORT_USER, CreatedModifiedMixin, Source, UserShort
+from saltbox_sdk.utilities.helpers import Iso8601ZDatetime as TimezoneAwareDatetime
+from saltbox_sdk.utilities.helpers import format_iso8601_z, make_aware, utc_now
+
+# Jobs
 
 T = TypeVar('T')
 JID_T = TypeVar('JID_T', str, int)
@@ -127,214 +126,108 @@ class JobReturnModel(BaseModel, CreatedModifiedMixin):
 # Task-related schemas
 
 
-class TaskData(BaseModel):  # type: ignore[no-redef]
-    args: list | None = Field(default=None)
-    kwargs: dict | None = Field(default=None)
-
-
-class TaskSource(BaseModel):
-    type: str = Field(title='Source type')
-    id: str | None = Field(title='Source id', default=None)
-
-
-class TaskJobReturnStatus(str, Enum):
-    succeeded = 'succeeded'
-    failed = 'failed'
-    waiting = 'waiting'
-    timeout = 'timeout'
-
-
-class TaskJobStatus(str, Enum):
-    pending = 'pending'
-    running = 'running'
-    succeeded = 'succeeded'
-    failed = 'failed'
-
-
-class TaskJobTargetType(str, Enum):
-    list = 'list'
-    compound = 'compound'
-
-
-class TaskJobTarget(BaseModel):
-    tgt: str = Field(title='Salt tgt')
-    tgt_type: TaskJobTargetType = Field(title='Salt tgt type')
-    master: str = Field(title='Master')
-
-
-class TaskJob(BaseModel):
-    jid: str = Field(title='JID')
-    target: TaskJobTarget = Field(title='Job salt target')
-    status: TaskJobStatus = Field(title='Job status', default=TaskJobStatus.pending)
-    returns_statuses: dict[str, TaskJobReturnStatus] = Field(title='Job returns statuses by minions', default={})
-
-    minions_by_targeting: list[str] = Field(title='List of minions ids by targeting')
-    minions_from_salt: list[str] | None = Field(title='Computed minions by salt', default=None)
-
-    created_dt: Iso8601ZDatetime = Field(title='Created stamp', default_factory=utc_now)
-    finished_dt: Iso8601ZDatetime | None = Field(title='Finished stamp', default=None)
-
-
-class TaskTargetMinion(BaseModel):
-    minion_id: str
-    master: str
-
-
-class TaskTemplateShort(BaseModel):
-    id: str
-    title: str
-    name: str
-    repo_id: str
-    commit_hash: str
-
-
-class CollectionShort(BaseModel):
-    id: str
-    slug: str
-    title: str
-
-
-class TaskMinionStatus(str, Enum):
-    pending = 'pending'
-    in_work = 'in_work'
-    success = 'success'
-    failed = 'failed'
-
-
-class TaskMinionJobStatus(str, Enum):
-    created = 'created'
-    in_work = 'in_work'
-    success = 'success'
-    failed = 'failed'
-    ignored = 'ignored'
-
-
-class TaskMinion(BaseModel):
-    id: str | None = Field(title='Minion id', default=None)
-    minion_id: str
-    master: str
-
-    status: TaskMinionStatus = Field(title='status', default=TaskMinionStatus.pending)
-
-    jobs: dict[str, TaskMinionJobStatus] = Field(title='Jobs', default={})
-
-    start_last_dt: Iso8601ZDatetime | None = Field(title='Last job start dt', default=None)
-    finished_dt: Iso8601ZDatetime | None = Field(title='Processing finished dt', default=None)
-
-    @computed_field(title='Count job runs')
-    def count_runs(self) -> int:
-        return len(self.jobs)
-
-
-class TaskPostProcessingType(str, Enum):
-    on_success = 'on_success'
-    on_anyway = 'on_anyway'
-
-
-class TaskPostProcessingMinionForWait(BaseModel):
-    minion_id: str = Field(title='Minion ID')
-    master: str = Field(title='Master')
-
-
-class TaskPostProcessingCreate(BaseModel):
-    type: TaskPostProcessingType = Field(title='Postprocessing type')
-
-    wait_minions: list[TaskPostProcessingMinionForWait] = Field(title='Wait minions', default=[])
-    wait_minions_ttl: int = Field(title='Wait minions TTL', ge=1, default=60 * 5)
-
-    task_create_request: 'TaskCreateRequestSchema | None' = Field(title='Create task', default=None)
-
-    notify: bool = Field(title='Notify', default=False)
-
-
-class TaskCreateRequestSchema(BaseModel):
-    task_template_id: str | None = Field(title='Task template id', default=None)
-    fun: str | None = Field(title='Salt fun', default=None)
-
-    salt_masters: list[str] = ['salt-master']
-    data: TaskData | None = None
-
-    collection_id: str = Field(title='Collection id')
-    query: dict = Field(title='Query', default={})
-    minions: list[TaskTargetMinion] = Field(title='Minions', default=[])
-
-    batch_size: int | None = Field(title='Batch size', default=None)
-    max_jobs_count_at_same_time: int = Field(title='Max jobs count at some time', ge=1, default=1)
-    max_retries: int = Field(title='Max retries', default=3)
-
-    postprocessing: TaskPostProcessingCreate | None = Field(title='Postprocessing', default=None)
-
-    @model_validator(mode='after')
-    def validate_local_path(self) -> Self:
-        if self.task_template_id is None and self.fun is None:
-            msg = 'One of `task_template` or `fun` must be set'
-            raise ValueError(msg)
-
-        if self.task_template_id is not None and self.fun is not None:
-            msg = 'Only one of `task_template` or `fun` can be set'
-            raise ValueError(msg)
-
-        return self
-
-
-class TaskPostProcessing(TaskPostProcessingCreate):
-    task_create_id: str | None = Field(title='Task ID', default=None)
-    notify_dt: Iso8601ZDatetime | None = Field(title='Notify dt', default=None)
+class TaskType(StrEnum):
+    classic = 'classic'
+    policy = 'policy'
 
 
 class TaskStatus(StrEnum):
     created = 'created'
+    wait_minions = 'wait_minions'
     running = 'running'
     stopping = 'stopping'
     stopped = 'stopped'
-    postprocessing = 'postprocessing'
     finished = 'finished'
 
 
-class TaskModel(BaseModel):
-    id: str = Field(title='ID', alias='_id', serialization_alias='id')
-    jobs: dict[str, TaskJob] = Field(title='Jobs', default={})
-    minions: dict[str, TaskMinion] = Field(title='Minions failed', default={})
-    status: TaskStatus = Field(title='Status', default=TaskStatus.created)
+class TaskTemplateShort(BaseModel, IDMixin):
+    id: PyObjectId = Field(title='ID', serialization_alias='id')
+    title: str = Field(title='Template title')
+    name: str = Field(title='Template name')
+    repo_id: PyObjectId = Field(title='Repository id')
+    commit_hash: str = Field(title='Repository commit hash')
 
-    run_dt: Iso8601ZDatetime | None = Field(title='Run datetime', default=None)
-    stopped_dt: Iso8601ZDatetime | None = Field(title='Stopped datetime', default=None)
-    postprocessing_dt: Iso8601ZDatetime | None = Field(title='Postprocessing datetime', default=None)
-    finished_dt: Iso8601ZDatetime | None = Field(title='Finished datetime', default=None)
 
-    postprocessing: TaskPostProcessing | None = Field(title='Postprocessing', default=None)
+class CollectionShort(BaseModel):
+    id: PyObjectId = Field(title='ID', serialization_alias='id')
+    slug: str = Field(title='Collection slug')
+    title: str = Field(title='Collection title')
 
-    parent_task_id: str | None = Field(title='Parent task id', default=None)
-    task_template: TaskTemplateShort | None = Field(title='Task template', default=None)
+
+class TaskStatusShort(BaseModel, CreatedModifiedMixin):
+    type: TaskStatus = Field(title='Status')
+    data: dict = Field(title='Status data', default_factory=dict)
+
+
+class TaskReadOnlyFieldsMixin:
+    task_type: TaskType = Field(title='Task type')
+
+    target_collection_id: PyObjectId = Field(title='Target ID')
+    target_query: dict[str, Any] = Field(title='Target query', default={})
+
+    task_template_id: PyObjectId | None = Field(title='Task template id', default=None)
 
     fun: str = Field(title='Salt fun')
-    task_args: list[str] | None = Field(title='Args', default=None)
-    task_kwargs: dict[str, Any] | None = Field(title='Kwargs', default=None)
-
-    target_collection: CollectionShort = Field(title='Target collection')
-    target_query: dict[str, Any] = Field(title='Target query', default={})
-    target_minions: list[TaskTargetMinion] = Field(title='Target minions', default=[])
-    target_masters: list[str] = Field(title='Target masters', default=[])
-
-    batch_size: int | None = Field(title='Batch size', default=None)
-    max_jobs_count_at_same_time: int = Field(title='Max jobs count at some time', ge=1, default=1)
-    max_retries: int = Field(title='Max retries', ge=1, default=3)
+    arg: list[str] | None = Field(title='Arg', default=None)
+    kwarg: dict[str, Any] | None = Field(title='Kwarg', default=None)
 
     user: UserShort
-    source: TaskSource | None = Field(title='Source', default=None)
+    source: Source | None = Field(title='Source', default=None)
 
-    created: Iso8601ZDatetime = Field(title='Created')
-    modified: Iso8601ZDatetime = Field(title='Modified')
 
-    @computed_field(title='Total minions')
-    def total_minions(self) -> int:
-        return len(self.minions)
+class TaskEditableFieldsMixin:
+    batch_size: int = Field(title='Batch size', ge=0, default=0)
+    max_jobs_count_at_same_time: int = Field(title='Max jobs count at some time', ge=1, default=1)
 
-    @computed_field(title='Minions count by status')
-    def minions_count_by_status(self) -> dict[TaskMinionStatus, int]:
-        result: dict[TaskMinionStatus, int] = dict.fromkeys(TaskMinionStatus, 0)
+    max_retries: int = Field(title='Max retries', ge=0, default=1)
+    retry_delay: int = Field(title='Retry delay', description='in seconds', ge=0, default=10)
 
-        for minion in self.minions.values():
-            result[minion.status] += 1
+    last_sync_dt: TimezoneAwareDatetime | None = Field(title='Last sync datetime', default=None)
 
-        return result
+
+class TaskTemplateJoinedFieldsMixin:
+    task_template: TaskTemplateShort | None = Field(title='Task template', default=None)
+
+
+class TaskTargetCollectionJoinedFieldsMixin:
+    target_collection: CollectionShort = Field(title='Target collection')
+
+
+class TaskStatusJoinedFieldsMixin:
+    status: TaskStatusShort = Field(
+        title='Status', default=TaskStatusShort(type=TaskStatus.created, created=utc_now(), modified=utc_now())
+    )
+
+
+class TaskJobJoinedFieldsMixin[TaskJobJoinedSchema: BaseModel]:
+    jobs: list[TaskJobJoinedSchema] = Field(title='Jobs', default=[])
+
+
+class TaskMinionsCountAggregation(BaseModel):
+    total: int = Field(title='Total number of minions', default=0)
+    pending: int = Field(title='Pending minions', default=0)
+    busy: int = Field(title='Busy', default=0)
+    in_work: int = Field(title='In work', default=0)
+    success: int = Field(title='Success', default=0)
+    failed: int = Field(title='Failed', default=0)
+
+
+class TaskAggregatedFieldsMixin:
+    minions_count: TaskMinionsCountAggregation = Field()
+
+
+class TaskComputedFieldsMixin: ...
+
+
+class TaskModel(
+    BaseModel,
+    CreatedModifiedMixin,
+    TaskTemplateJoinedFieldsMixin,
+    TaskTargetCollectionJoinedFieldsMixin,
+    TaskStatusJoinedFieldsMixin,
+    TaskAggregatedFieldsMixin,
+    TaskEditableFieldsMixin,
+    TaskReadOnlyFieldsMixin,
+    TaskComputedFieldsMixin,
+    IDMixin,
+): ...

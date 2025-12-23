@@ -140,21 +140,3 @@ def fill_salt_kwarg_from_arg(
         new_kwarg.update(kwarg_dict)
 
     return new_arg, new_kwarg
-
-
-def utc_now() -> datetime:
-    return datetime.now(tz=UTC)
-
-
-def make_aware(value: Any) -> Any:
-    if isinstance(value, datetime) and value.tzinfo is None:
-        value = value.replace(tzinfo=UTC)
-    return value
-
-
-def format_iso8601_z(dt: datetime) -> str:
-    """
-    Format datetime to ISO 8601 with Z-suffix (UTC).
-    Example: 2025-04-08T11:39:06.140000Z
-    """
-    return dt.strftime('%Y-%m-%dT%H:%M:%S.%fZ')

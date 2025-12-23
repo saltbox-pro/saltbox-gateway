@@ -9,7 +9,7 @@ from saltbox_gateway.tmp_ws_proxy.dao import JobDao, TaskDao
 from saltbox_gateway.tmp_ws_proxy.schemas import IntJid, JobModel, JobReturnModel, TaskModel
 from saltbox_gateway.tmp_ws_proxy.utils import JID
 from saltbox_gateway.utils.opa_client import get_opa_client
-from saltbox_gateway.utils.secure_websocket import PubSubAuthenticatedWebSocket
+from saltbox_gateway.utils.secure_websocket import PubSubAuthenticatedWebSocket, PubSubMessageHandler
 from saltbox_sdk.db.redis.config import get_redis
 
 ws_core_jobs_router = APIRouter(prefix='/api/core/jobs')
@@ -23,10 +23,10 @@ async def jobs_rets_websocket(
 ) -> None:
     secure_websocket = PubSubAuthenticatedWebSocket(websocket, rdb)
     await secure_websocket.handle_pubsub(
-        {
-            'job:*:create': JobModel,
-            'job:*:update': JobModel,
-        }
+        handlers=[
+            PubSubMessageHandler('job:*:create', 'job', schema=JobModel),
+            PubSubMessageHandler('job:*:update', 'job', schema=JobModel),
+        ]
     )
 
 
@@ -47,10 +47,10 @@ async def job_info_endpoint_websocket(
 
     secure_websocket = PubSubAuthenticatedWebSocket(websocket, rdb)
     await secure_websocket.handle_pubsub(
-        {
-            f'job:{jid}:create': JobModel,
-            f'job:{jid}:update': JobModel,
-        }
+        handlers=[
+            PubSubMessageHandler(f'job:{jid}:create', 'job', schema=JobModel),
+            PubSubMessageHandler(f'job:{jid}:update', 'job', schema=JobModel),
+        ]
     )
 
 
@@ -71,10 +71,10 @@ async def jobs_endpoint_websocket(
 
     secure_websocket = PubSubAuthenticatedWebSocket(websocket, rdb)
     await secure_websocket.handle_pubsub(
-        {
-            f'job-return:{jid}:create': JobReturnModel,
-            f'job-return:{jid}:update': JobReturnModel,
-        }
+        handlers=[
+            PubSubMessageHandler(f'job-return:{jid}:create', 'job-return', schema=JobReturnModel),
+            PubSubMessageHandler(f'job-return:{jid}:update', 'job-return', schema=JobReturnModel),
+        ]
     )
 
 
@@ -85,10 +85,10 @@ async def tasks_websocket(
 ) -> None:
     secure_websocket = PubSubAuthenticatedWebSocket(websocket, rdb)
     await secure_websocket.handle_pubsub(
-        {
-            'task:*:create': TaskModel,
-            'task:*:update': TaskModel,
-        }
+        handlers=[
+            PubSubMessageHandler('task:*:create', 'task', schema=TaskModel),
+            PubSubMessageHandler('task:*:update', 'task', schema=TaskModel),
+        ]
     )
 
 
@@ -108,13 +108,13 @@ async def task_websocket(
 
     secure_websocket = PubSubAuthenticatedWebSocket(websocket, rdb)
     await secure_websocket.handle_pubsub(
-        {
-            f'task:{tid}:job-return:*:create': JobReturnModel,
-            f'task:{tid}:job-return:*:update': JobReturnModel,
-            f'task:{tid}:job:*:create': JobModel,
-            f'task:{tid}:job:*:update': JobModel,
-            f'task:{tid}:update': TaskModel,
-        }
+        handlers=[
+            PubSubMessageHandler(f'task:{tid}:job-return:*:create', 'job-return', schema=JobReturnModel),
+            PubSubMessageHandler(f'task:{tid}:job-return:*:update', 'job-return', schema=JobReturnModel),
+            PubSubMessageHandler(f'task:{tid}:job:*:create', 'job', schema=JobModel),
+            PubSubMessageHandler(f'task:{tid}:job:*:update', 'job', schema=JobModel),
+            PubSubMessageHandler(f'task:{tid}:update', 'task', schema=TaskModel),
+        ]
     )
 
 
@@ -137,8 +137,8 @@ async def tasks_websocket_new(
         },
     )
     await secure_websocket.handle_pubsub(
-        {
-            f'task:{secure_websocket.user.sub}:*:create': TaskModel,
-            f'task:{secure_websocket.user.sub}*:update': TaskModel,
-        }
+        handlers=[
+            PubSubMessageHandler(f'task:{secure_websocket.user.sub}:*:create', 'task', schema=TaskModel),
+            PubSubMessageHandler(f'task:{secure_websocket.user.sub}*:update', 'task', schema=TaskModel),
+        ]
     )
