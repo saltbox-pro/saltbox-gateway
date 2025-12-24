@@ -236,12 +236,6 @@ class TaskModel(
 # Task minion
 
 
-class MinionDataSchema(BaseModel):
-    minion_id: str = Field(title='Minion ID')
-    master: str = Field(title='Master')
-    last_activity: TimezoneAwareDatetime | None = Field(title='Last activity', default=None)
-
-
 class TaskMinionStatus(StrEnum):
     pending = 'pending'
     busy = 'busy'
@@ -273,7 +267,9 @@ class TaskMinionEditableFieldsMixin:
 
 
 class TaskMinionJoinedFieldsMixin:
-    minion_data: MinionDataSchema = Field(title='Minion Data')
+    minion_id: str = Field(title='Minion ID')
+    master: str = Field(title='Master')
+    last_activity: TimezoneAwareDatetime | None = Field(title='Last activity', default=None)
 
 
 class TaskMinionModel(
