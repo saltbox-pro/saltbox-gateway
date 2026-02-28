@@ -52,6 +52,8 @@ class JobReadOnlyFieldsMixin:
     arg: list | None = None
     kwarg: dict | None = None
 
+    ttl: int = Field(ge=1, le=604800, default=604800)
+
     user: UserShort | None = Field(default=SYSTEM_SHORT_USER)
     source: Source | None = None
 
@@ -73,6 +75,7 @@ class JobComputedFieldsMixin:
 
 class JobAggregateFieldsMixin:
     returning: dict[str, bool | None] = Field(default={})
+    waiting_expires_at_dt: datetime
 
 
 class JobModel(
