@@ -81,6 +81,7 @@ class HealthChecker:
         updated_instances = [inst for inst in task_results if isinstance(inst, ServiceInstance)]
 
         service.instances = updated_instances
+        service.front_config.is_available = any(inst.healthy for inst in updated_instances)
 
         async with self._locker.create(key=service.name):
             await self._dao.update(service.model_dump())
