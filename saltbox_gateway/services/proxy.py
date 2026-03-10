@@ -152,8 +152,11 @@ class ProxyService:
 
         if not endpoint:
             raise ServiceEndpointNotFoundException(service.name, path)
-
-        url = f'http://{service_instance.host}:{service_instance.port}/{path.strip("/")}'
+        if service_instance.base_route:
+            full_path = f'{service_instance.base_route.strip("/")}/{path.strip("/")}'
+        else:
+            full_path = path.strip('/')
+        url = f'http://{service_instance.host}:{service_instance.port}/{full_path}'
 
         # TODO: refactor cache conditions
         if endpoint.cache_ttl > 0:
