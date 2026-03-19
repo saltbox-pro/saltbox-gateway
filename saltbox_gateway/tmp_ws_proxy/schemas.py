@@ -1,15 +1,28 @@
 from datetime import datetime
 from enum import StrEnum
-from typing import Annotated, Any, TypeVar
+from typing import Annotated, Any, Literal, TypeVar
 
 from pydantic import AfterValidator, BaseModel, Field, PastDatetime, PlainSerializer, computed_field
 
 from saltbox_gateway.tmp_ws_proxy.errors import JidError
 from saltbox_gateway.tmp_ws_proxy.utils import JID
-from saltbox_sdk.db.mongo.schemas_base import IDMixin, PyObjectId
+from saltbox_sdk.db.mongo.schemas_base import PyObjectId
 from saltbox_sdk.db.schemas_base import SYSTEM_SHORT_USER, CreatedModifiedMixin, Source, UserShort
 from saltbox_sdk.utilities.helpers import Iso8601ZDatetime as TimezoneAwareDatetime
 from saltbox_sdk.utilities.helpers import format_iso8601_z, make_aware, utc_now
+
+JOBS_MAX_TTL = 60 * 60 * 24 * 7
+JOBS_DEFAULT_TTL = 60 * 60 * 24 * 7
+
+TASKS_DEFAULTS_BATCH_SIZE = 0
+TASKS_DEFAULTS_MAX_JOBS_COUNT_AT_SAME_TIME = 1
+TASKS_DEFAULTS_MAX_RETRIES = 0
+TASKS_DEFAULTS_RETRY_DELAY = 10
+
+
+class IDMixin:
+    id: PyObjectId = Field(title='ID', serialization_alias='id')
+
 
 # Jobs
 
@@ -20,6 +33,9 @@ Iso8601ZDatetime = Annotated[
     AfterValidator(make_aware),
     PlainSerializer(format_iso8601_z, when_used='json'),
     'Aware datetime serializing with Z-suffix. Unaware datetime decides UTC.',
+]
+SaltTgtType = Literal[
+    'glob', 'pcre', 'list', 'grain', 'grain_pcre', 'pillar', 'pillar_pcre', 'nodegroup', 'range', 'compound', 'ipcidr'
 ]
 
 
@@ -46,13 +62,13 @@ class JobStatus(StrEnum):
 
 class JobReadOnlyFieldsMixin:
     tgt: str | list[str]
-    tgt_type: str
+    tgt_type: SaltTgtType
     salt_master: str
     fun: str
     arg: list | None = None
     kwarg: dict | None = None
 
-    ttl: int = Field(ge=1, le=604800, default=604800)
+    ttl: int = Field(ge=1, le=JOBS_MAX_TTL, default=JOBS_DEFAULT_TTL)
 
     user: UserShort | None = Field(default=SYSTEM_SHORT_USER)
     source: Source | None = None
@@ -64,7 +80,7 @@ class JobEditableFieldsMixin:
     missing: list[str] = Field(default=[])
     stamp: TimezoneAwareDatetime | None = Field(default=None)
     status: JobStatus = Field(default=JobStatus.starting)
-    error_type: str | None = None
+    launch_error_type: str | None = None
 
 
 class JobComputedFieldsMixin:
@@ -104,6 +120,7 @@ class JobReturnStatus(StrEnum):
     success = 'success'
     failed = 'failed'
     timeout = 'timeout'
+    ignored = 'ignored'
 
 
 class JobReturnReadOnlyFieldsMixin:
@@ -157,16 +174,24 @@ class TaskStatus(StrEnum):
     finished = 'finished'
 
 
+class TaskTemplateDefaultsSchema(BaseModel):
+    batch_size: int | None = Field(title='Batch size', ge=0, default=None)
+    max_jobs_count_at_same_time: int | None = Field(title='Max jobs count at some time', ge=1, default=None)
+    max_retries: int | None = Field(title='Max retries', ge=0, default=None)
+    retry_delay: int | None = Field(title='Retry delay', ge=0, default=None)
+    ttl: int | None = Field(ge=0, le=JOBS_MAX_TTL, default=None)
+
+
 class TaskTemplateShort(BaseModel, IDMixin):
     id: PyObjectId = Field(title='ID', serialization_alias='id')
     title: str = Field(title='Template title')
     name: str = Field(title='Template name')
-    repo_id: PyObjectId = Field(title='Repository id')
-    commit_hash: str = Field(title='Repository commit hash')
+    repo_id: PyObjectId | None = Field(title='Repository id', default=None)
+    commit_hash: str | None = Field(title='Repository commit hash', default=None)
+    defaults: TaskTemplateDefaultsSchema | None = Field(title='Default values', default=None)
 
 
-class CollectionShort(BaseModel):
-    id: PyObjectId = Field(title='ID', serialization_alias='id')
+class CollectionShort(BaseModel, IDMixin):
     slug: str = Field(title='Collection slug')
     title: str = Field(title='Collection title')
 
@@ -193,11 +218,14 @@ class TaskReadOnlyFieldsMixin:
 
 
 class TaskEditableFieldsMixin:
-    batch_size: int = Field(title='Batch size', ge=0, default=0)
-    max_jobs_count_at_same_time: int = Field(title='Max jobs count at some time', ge=1, default=1)
+    batch_size: int = Field(title='Batch size', ge=0, default=TASKS_DEFAULTS_BATCH_SIZE)
+    max_jobs_count_at_same_time: int = Field(
+        title='Max jobs count at some time', ge=1, default=TASKS_DEFAULTS_MAX_JOBS_COUNT_AT_SAME_TIME
+    )
 
-    max_retries: int = Field(title='Max retries', ge=0, default=1)
-    retry_delay: int = Field(title='Retry delay', description='in seconds', ge=0, default=10)
+    max_retries: int = Field(title='Max retries', ge=0, default=TASKS_DEFAULTS_MAX_RETRIES)
+    retry_delay: int = Field(title='Retry delay', description='in seconds', ge=0, default=TASKS_DEFAULTS_RETRY_DELAY)
+    ttl: int | None = Field(ge=0, le=JOBS_MAX_TTL, default=None)
 
     last_sync_dt: TimezoneAwareDatetime | None = Field(title='Last sync datetime', default=None)
 
@@ -261,14 +289,6 @@ class TaskMinionStatus(StrEnum):
     failed = 'failed'
 
 
-class TaskMinionJobStatus(StrEnum):
-    created = 'created'
-    in_work = 'in_work'
-    success = 'success'
-    failed = 'failed'
-    ignored = 'ignored'
-
-
 class TaskMinionReadOnlyFieldsMixin:
     task_id: PyObjectId = Field(title='Task ID')
     minion_inner_id: PyObjectId = Field(title='Minion Mongo ID')
@@ -277,16 +297,17 @@ class TaskMinionReadOnlyFieldsMixin:
 class TaskMinionEditableFieldsMixin:
     status: TaskMinionStatus = Field(title='Status', default=TaskMinionStatus.pending)
 
-    jobs: dict[str, TaskMinionJobStatus] = Field(title='Jobs', default={})
-
     start_last_dt: TimezoneAwareDatetime | None = Field(title='Last job start dt', default=None)
     finished_dt: TimezoneAwareDatetime | None = Field(title='Processing finished dt', default=None)
+    check_unactive_last_job_dt: TimezoneAwareDatetime | None = Field(title='Last check unactive dt', default=None)
 
 
 class TaskMinionJoinedFieldsMixin:
     minion_id: str = Field(title='Minion ID')
     master: str = Field(title='Master')
     last_activity: TimezoneAwareDatetime | None = Field(title='Last activity', default=None)
+    jobs: dict[str, JobReturnStatus] = Field(title='Jobs', default={})
+    count_runs: int = Field(title='Count runs')
 
 
 class TaskMinionModel(
@@ -296,7 +317,4 @@ class TaskMinionModel(
     TaskMinionReadOnlyFieldsMixin,
     TaskMinionEditableFieldsMixin,
     IDMixin,
-):
-    @computed_field(title='Count job runs')
-    def count_runs(self) -> int:
-        return len(self.jobs)
+): ...

@@ -213,7 +213,12 @@ class PubSubMessageHandler:
             instance = self.schema(**data)
             return instance.model_dump(by_alias=True, mode='json')
         except (ValidationError, TypeError, json.JSONDecodeError) as e:
-            logger.error('Error processing pubsub message %s', e)
+            logger.error(
+                'Error processing pubsub message from channel "%s"\nMessage: %s\nError: %s\n---',
+                message['channel'],
+                e,
+                data_str,
+            )
 
         return None
 
@@ -230,7 +235,12 @@ class PubSubMessageHandler:
             if result is not None:
                 return result
         except (ValidationError, TypeError, json.JSONDecodeError) as e:
-            logger.error('Error processing pubsub message %s', e)
+            logger.error(
+                'Error processing pubsub message from channel "%s"\nMessage: %s\nError: %s\n---',
+                message['channel'],
+                e,
+                data_str,
+            )
 
         return None
 
@@ -260,7 +270,6 @@ class PubSubAuthenticatedWebSocket(AuthenticatedWebSocket):
 
     async def _message_forwarder(self, handler: PubSubMessageHandler) -> None:
         async with self._rdb.pubsub() as pubsub:
-            logger.warning(handler)
             await pubsub.psubscribe(handler.channel)
             async for message in pubsub.listen():
                 if self._already_closed:
