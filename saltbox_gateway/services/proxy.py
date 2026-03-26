@@ -332,6 +332,7 @@ class ProxyService:
         headers['X-User-Email'] = user.email
         headers['X-User-Email-Verified'] = str(user.email_verified)
         headers['X-User-Name'] = user.name
+        headers['Via'] = self.append_via_header(headers.get('via'))
 
         return headers
 
@@ -389,10 +390,13 @@ class ProxyService:
 
         logger.debug(f'Fetching static file from {url}')
 
+        hdrs = {
+            **self._request_data.headers,
+            'via': self.append_via_header(self._request_data.headers.get('via')),
+        }
+
         static_response = await self._httpx_client.get(
-            url,
-            headers=self._request_data.headers,
-            params=self._request_data.query_params,
+            url, headers=hdrs, params=self._request_data.query_params,
         )
 
         if static_response.is_error:
@@ -464,6 +468,19 @@ class ProxyService:
             result[path] = opa_response
 
         return result
+
+    @staticmethod
+    def append_via_header(via: str | None) -> str:
+        """
+        Append Gateway to VIA header
+
+        VIA HTTP header describes porxies chain in form of list:
+        '[proto/]proto_ver host, [proto/]proto_ver host...'
+        """
+        new_val = '1.1 gateway'  # Proto version MUST be changed with client proto version
+        if not via:
+            return new_val
+        return f'{via}, {new_val}'
 
 
 async def get_proxy_service(
