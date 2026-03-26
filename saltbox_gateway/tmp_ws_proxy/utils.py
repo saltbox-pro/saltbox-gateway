@@ -1,12 +1,8 @@
 import functools
 import re
 from datetime import UTC, datetime
-from typing import Any, cast
+from typing import Any
 
-import httpx
-
-from saltbox_gateway.exceptions import SecureWebSocketPolicyException
-from saltbox_gateway.services.discovery import DiscoveryService
 from saltbox_gateway.tmp_ws_proxy.errors import UnexpectedDataFormatError, UnexpectedJidFormatError
 
 
@@ -144,24 +140,3 @@ def fill_salt_kwarg_from_arg(
         new_kwarg.update(kwarg_dict)
 
     return new_arg, new_kwarg
-
-async def _fetch_resource(httpx_client: httpx.AsyncClient, endpoint: str) -> dict:
-    result = await httpx_client.get(endpoint)
-    if result.status_code != 200:
-        msg = f'Unsuccessful response by endpoint={endpoint}'
-        raise SecureWebSocketPolicyException(msg)
-    return cast(dict, result.json())
-
-async def validate_resource_exists(
-        resource_uri: str,
-        discovery: DiscoveryService,
-        httpx_client: httpx.AsyncClient
-) -> None:
-    core_service = await discovery.get_service_by_name('core')
-    instance = next(inst for inst in core_service.instances if inst.healthy)
-
-    endpoint = f'http://{instance.host}:{instance.port}/{resource_uri}'
-    data = await _fetch_resource(httpx_client, endpoint)
-    if not data:
-        msg = f'Resource not found by endpoint={endpoint}'
-        raise SecureWebSocketPolicyException(msg)

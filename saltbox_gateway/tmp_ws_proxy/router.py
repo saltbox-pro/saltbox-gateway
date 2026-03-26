@@ -1,17 +1,15 @@
 from typing import Annotated
 
-import httpx
 from fastapi import APIRouter, Depends, WebSocket
 from redis.asyncio import Redis
 
 from saltbox_gateway.exceptions import SecureWebSocketPolicyException
 from saltbox_gateway.services.discovery import DiscoveryService, get_discovery_service
-from saltbox_gateway.tmp_ws_proxy.schemas import JobModel, JobReturnModel, TaskMinionModel, TaskModel
-from saltbox_gateway.tmp_ws_proxy.utils import validate_resource_exists
-from saltbox_gateway.utils.httpx_client import HttpxClientSingletoneFactory
+from saltbox_gateway.tmp_ws_proxy.dao import JobDao, TaskDao
+from saltbox_gateway.tmp_ws_proxy.schemas import IntJid, JobModel, JobReturnModel, TaskMinionModel, TaskModel
+from saltbox_gateway.tmp_ws_proxy.utils import JID
 from saltbox_gateway.utils.opa_client import get_opa_client
 from saltbox_gateway.utils.secure_websocket import PubSubAuthenticatedWebSocket, PubSubMessageHandler
-from saltbox_sdk.db.mongo.schemas_base import PyObjectId
 from saltbox_sdk.db.redis.config import get_redis
 
 ws_core_jobs_router = APIRouter(prefix='/api/core/jobs')
@@ -34,17 +32,19 @@ async def jobs_rets_websocket(
 
 @ws_core_jobs_router.websocket('/{jid}/info')
 async def job_info_endpoint_websocket(
-    jid: PyObjectId,
+    jid: IntJid,
     websocket: WebSocket,
     rdb: Annotated[Redis, Depends(get_redis)],
     discovery: Annotated[DiscoveryService, Depends(get_discovery_service)],
-    httpx_client: Annotated[httpx.AsyncClient, Depends(HttpxClientSingletoneFactory.get_instance)]
 ) -> None:
-    await validate_resource_exists(
-        resource_uri=f'jobs/{jid!s}',
-        discovery=discovery,
-        httpx_client=httpx_client
-    )
+    _jid = JID(jid)
+    job_service = JobDao(discovery)
+    job = job_service.get_job(_jid)
+
+    if not job:
+        msg = f'Job not found by JID={jid}'
+        raise SecureWebSocketPolicyException(msg)
+
     secure_websocket = PubSubAuthenticatedWebSocket(websocket, rdb)
     await secure_websocket.handle_pubsub(
         handlers=[
@@ -56,17 +56,19 @@ async def job_info_endpoint_websocket(
 
 @ws_core_jobs_router.websocket('/{jid}/return')
 async def jobs_endpoint_websocket(
-    jid: PyObjectId,
+    jid: IntJid,
     websocket: WebSocket,
     rdb: Annotated[Redis, Depends(get_redis)],
     discovery: Annotated[DiscoveryService, Depends(get_discovery_service)],
-    httpx_client: Annotated[httpx.AsyncClient, Depends(HttpxClientSingletoneFactory.get_instance)]
 ) -> None:
-    await validate_resource_exists(
-        resource_uri=f'jobs/{jid!s}',
-        discovery=discovery,
-        httpx_client=httpx_client
-    )
+    _jid = JID(jid)
+    job_service = JobDao(discovery)
+    job = job_service.get_job(_jid)
+
+    if not job:
+        msg = f'Job not found by JID={jid}'
+        raise SecureWebSocketPolicyException(msg)
+
     secure_websocket = PubSubAuthenticatedWebSocket(websocket, rdb)
     await secure_websocket.handle_pubsub(
         handlers=[
@@ -96,13 +98,14 @@ async def task_websocket(
     websocket: WebSocket,
     rdb: Annotated[Redis, Depends(get_redis)],
     discovery: Annotated[DiscoveryService, Depends(get_discovery_service)],
-    httpx_client: Annotated[httpx.AsyncClient, Depends(HttpxClientSingletoneFactory.get_instance)]
 ) -> None:
-    await validate_resource_exists(
-        resource_uri=f'tasks/{tid}',
-        discovery=discovery,
-        httpx_client=httpx_client
-    )
+    task_service = TaskDao(discovery)
+    task = await task_service.get_task(tid=tid)
+
+    if not task:
+        msg = f'Task not found by ID={tid}'
+        raise SecureWebSocketPolicyException(msg)
+
     secure_websocket = PubSubAuthenticatedWebSocket(websocket, rdb)
     await secure_websocket.handle_pubsub(
         handlers=[
