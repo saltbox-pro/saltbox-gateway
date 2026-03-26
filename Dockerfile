@@ -38,9 +38,9 @@ WORKDIR /
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 
 
-################
+###############
 ## Dev image ##
-################
+###############
 
 ## Mount gateway repository dir to /mnt/saltbox-gateway to serve with the container.
 
@@ -62,6 +62,7 @@ ENV DEV_MODE=1
 VOLUME /mnt/saltbox-gateway/
 VOLUME /mnt/saltbox-sdk/
 ENV SALTBOX_SDK_SRC_PATH /mnt/saltbox-sdk/
+RUN git config --global --add safe.directory '/mnt/*'
 
 
 ################
