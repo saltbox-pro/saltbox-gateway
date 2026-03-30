@@ -83,14 +83,21 @@ class JobEditableFieldsMixin:
     launch_error_type: str | None = None
 
 
-class JobComputedFieldsMixin:
-    @computed_field(title='Timestamp decoded from JID')
-    def fms_jid_timestamp(self) -> Annotated[datetime, PastDatetime]:
-        return JID(self.jid).to_datetime()  # type: ignore
+class JobComputedFieldsMixin: ...
+
+
+class JobMinionsCountAggregation(BaseModel):
+    total: int = Field(title='Total number of minions', default=0)
+    waiting: int = Field(title='Waiting', default=0)
+    success: int = Field(title='Success', default=0)
+    failed: int = Field(title='Failed', default=0)
+    timeout: int = Field(title='Timeout', default=0)
+    ignored: int = Field(title='Ignored', default=0)
 
 
 class JobAggregateFieldsMixin:
     returning: dict[str, bool | None] = Field(default={})
+    minions_count: JobMinionsCountAggregation = Field()
     waiting_expires_at_dt: datetime
 
 
