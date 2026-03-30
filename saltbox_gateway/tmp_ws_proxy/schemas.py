@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Annotated, Any, Literal, TypeVar
 
-from pydantic import AfterValidator, BaseModel, Field, PastDatetime, PlainSerializer, computed_field
+from pydantic import AfterValidator, BaseModel, Field, PlainSerializer
 
 from saltbox_gateway.tmp_ws_proxy.errors import JidError
 from saltbox_gateway.tmp_ws_proxy.utils import JID
