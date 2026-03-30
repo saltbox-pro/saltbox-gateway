@@ -111,8 +111,6 @@ async def task_websocket(
         handlers=[
             PubSubMessageHandler(f'task:{tid}:job-return:*:create', 'job-return', schema=JobReturnModel),
             PubSubMessageHandler(f'task:{tid}:job-return:*:update', 'job-return', schema=JobReturnModel),
-            PubSubMessageHandler(f'task:{tid}:job:*:create', 'job', schema=JobModel),
-            PubSubMessageHandler(f'task:{tid}:job:*:update', 'job', schema=JobModel),
             PubSubMessageHandler(f'task:{tid}:task-minion:*:create', 'task-minion', schema=TaskMinionModel),
             PubSubMessageHandler(f'task:{tid}:task-minion:*:update', 'task-minion', schema=TaskMinionModel),
             PubSubMessageHandler(f'task:{tid}:update', 'task', schema=TaskModel),
