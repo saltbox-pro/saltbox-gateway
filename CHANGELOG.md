@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-04-06
+
+### Added
+
+- Forwarding TaskMinion events through WebSocket.
+- Initial implementation of new WebSocket layer.
+- New fields in job schemas:
+  - `ttl`
+  - `waiting_expires_at_dt`
+
+### Changed
+
+- WebSocket schemas updated and aligned with backend changes.
+- Removed job-related messages from task WebSocket.
+- Updated `saltbox-sdk` dependency version.
+- Improved ProxyService:
+  - updated URL construction
+  - added support for `Via` header handling.
+- Updated health checker service availability logic.
+- CI pipeline updated to use new `ci-lib` jobs and stages.
+- Development setup improvements (`git safe.directory`).
+
+### Fixed
+
+- Code style issues fixed via `ruff`.
+- PEP 639 compatibility fixes.
+
 ## [0.1.2] - 2025-12-22
 
 - New common minor version tag
