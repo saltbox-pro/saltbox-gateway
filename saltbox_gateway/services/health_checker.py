@@ -39,7 +39,7 @@ class HealthChecker:
                 await self._check_all_services()
             except Exception as e:
                 logger.error(f'Health check failed: {e}')
-            await asyncio.sleep(SETTINGS.health_check_interval)
+            await asyncio.sleep(SETTINGS.app.health_check_interval)
 
     async def _check_all_services(self) -> None:
         services_data = await self._dao.list()
@@ -54,7 +54,7 @@ class HealthChecker:
         async def check_instance(instance: ServiceInstance) -> ServiceInstance:
             url = f'http://{instance.host}:{instance.port}{instance.healthcheck_path}'
             try:
-                response = await self._httpx_client.get(url, timeout=SETTINGS.health_check_timeout)
+                response = await self._httpx_client.get(url, timeout=SETTINGS.app.health_check_timeout)
                 if response.status_code == 200:
                     instance.healthy = True
                     instance.last_check = instance.last_healthy = time.time()

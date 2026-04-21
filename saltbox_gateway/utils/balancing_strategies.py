@@ -4,7 +4,6 @@ from collections.abc import Callable
 
 from redis.asyncio import Redis
 
-from saltbox_gateway.config import logger
 from saltbox_sdk.discovery_client.schemas import ProxyBalancingStrategy, ServiceInstance
 
 
@@ -29,8 +28,6 @@ class RoundRobinBalancingStrategy(BalancingStrategy):
     async def choose(self, service_name: str, instances: list[ServiceInstance]) -> ServiceInstance:
         key = f'balance:rr:{service_name}'
         idx = await self.redis_client.incr(key)
-        logger.debug(f'Round Robin index for service "{service_name}": {idx}')
-        logger.debug(f'Choosing instance at index: {(idx - 1) % len(instances)}')
         return instances[(idx - 1) % len(instances)]
 
 

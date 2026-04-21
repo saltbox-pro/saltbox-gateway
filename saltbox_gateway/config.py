@@ -2,15 +2,19 @@ import logging.config
 import os
 from pathlib import Path
 
+from faststream.rabbit import RabbitBroker
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from saltbox_sdk.config.rabbitmq_config import RabbitSettings
+from saltbox_sdk.config.redis_config import RedisSettings
 
 APP_NAME = 'Salt.Box Gateway'
 APP_DESC = 'Salt.Box Gateway and Service Discovery API'
 ENV_FILE = Path(os.environ.get('SALTBOX_ENV_FILE', '.env'))
 
 
-class Settings(BaseSettings):
+class AppSettings(BaseSettings):
     log_level: str = 'INFO'
     server_outer_socket: str = 'localhost'
     server_ws_scheme: str = 'ws'
@@ -20,7 +24,7 @@ class Settings(BaseSettings):
     basic_auth_password: str = ''
     origins: list[str] = Field(['*'], description='CORS allowed resources')
     opa_url: str = ''
-    official_modules: list[str] = ['core', 'processing', 'metric', 'scheduler', 'inventory', 'migration']
+    official_modules: list[str] = ['core', 'processing', 'metric', 'scheduler', 'inventory', 'migration', 'audit']
     service_registration_ttl: int = 3600
     proxy_request_timeout: int = 10
     # granular HTTPX timeouts
@@ -43,12 +47,24 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=ENV_FILE, extra='ignore')
 
 
+class Settings(BaseSettings):
+    app: AppSettings = Field(default_factory=AppSettings)
+    rabbitmq: RabbitSettings = Field(default_factory=RabbitSettings)
+    redis: RedisSettings = Field(default_factory=RedisSettings)
+
+
 SETTINGS = Settings()
+
+broker = RabbitBroker(url=SETTINGS.rabbitmq.url)
+
+
+def get_broker() -> RabbitBroker:
+    return broker
 
 
 class LogConfig(BaseModel):
     LOG_FORMAT: str = '%(levelprefix)s [%(filename)s:%(lineno)d] %(message)s'
-    LOG_LEVEL: str = SETTINGS.log_level.upper()
+    LOG_LEVEL: str = SETTINGS.app.log_level.upper()
 
     version: int = 1
     disable_existing_loggers: bool = False

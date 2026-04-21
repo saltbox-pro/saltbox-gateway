@@ -39,7 +39,7 @@ class DiscoveryService:
 
     async def process(self, service: ServiceSchema) -> ServiceSchema:
         if service.type == ServiceType.OFFICIAL:
-            if service.name not in SETTINGS.official_modules:
+            if service.name not in SETTINGS.app.official_modules:
                 raise NonOfficialServiceException(service.name)
 
         logger.debug(f'Try to register service: {service.name}')
@@ -133,7 +133,7 @@ class DiscoveryService:
             auth_config=KeycloakConfig(
                 authority=f'{KC_SETTINGS.front_url}/realms/{KC_SETTINGS.realm}',
                 client_id=KC_SETTINGS.client,
-                redirect_uri=f'{SETTINGS.server_scheme}://{SETTINGS.server_outer_socket}',
+                redirect_uri=f'{SETTINGS.app.server_scheme}://{SETTINGS.app.server_outer_socket}',
                 client_secret=KC_SETTINGS.client_secret,
             ),
             services=[service.front_config for service in services if service.enabled],

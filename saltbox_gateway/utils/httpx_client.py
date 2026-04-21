@@ -11,18 +11,18 @@ class HttpxClientSingletoneFactory:
         """Get a singleton instance of httpx.AsyncClient."""
         if cls._instance is None:
             auth = None
-            if SETTINGS.basic_auth_username != '' and SETTINGS.basic_auth_password != '':
-                auth = httpx.BasicAuth(SETTINGS.basic_auth_username, SETTINGS.basic_auth_password)
+            if SETTINGS.app.basic_auth_username != '' and SETTINGS.app.basic_auth_password != '':
+                auth = httpx.BasicAuth(SETTINGS.app.basic_auth_username, SETTINGS.app.basic_auth_password)
             timeout = httpx.Timeout(
-                connect=SETTINGS.proxy_connect_timeout,
-                read=SETTINGS.proxy_read_timeout,
-                write=SETTINGS.proxy_write_timeout,
-                pool=SETTINGS.proxy_pool_timeout,
+                connect=SETTINGS.app.proxy_connect_timeout,
+                read=SETTINGS.app.proxy_read_timeout,
+                write=SETTINGS.app.proxy_write_timeout,
+                pool=SETTINGS.app.proxy_pool_timeout,
             )
             limits = httpx.Limits(
-                max_connections=SETTINGS.httpx_max_connections,
-                max_keepalive_connections=SETTINGS.httpx_max_keepalive,
-                keepalive_expiry=SETTINGS.httpx_keepalive_expiry,
+                max_connections=SETTINGS.app.httpx_max_connections,
+                max_keepalive_connections=SETTINGS.app.httpx_max_keepalive,
+                keepalive_expiry=SETTINGS.app.httpx_keepalive_expiry,
             )
             cls._instance = httpx.AsyncClient(auth=auth, timeout=timeout, limits=limits)
             logger.debug('HTTPX AsyncClient initialized.')

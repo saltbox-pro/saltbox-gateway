@@ -79,11 +79,9 @@ class KeycloakOIDC:
         if self._cache:
             oidc_config = await self._cache.get(self._oidc_url)
             if oidc_config:
-                logger.debug('OIDC config loaded from cache.')
                 return cast(dict[str, Any], json.loads(oidc_config))
 
         try:
-            logger.debug('Fetching OIDC config from URL: %s', self._oidc_url)
             response = await self._httpx_client.get(self._oidc_url)
             response.raise_for_status()
 
@@ -94,10 +92,8 @@ class KeycloakOIDC:
 
             self._algorithms = oidc_config.get('id_token_signing_alg_values_supported', self._algorithms)
 
-            logger.debug('OIDC config fetched successfully: %s - %s', self._issuer, self._algorithms)
             if self._cache:
                 await self._cache.set(self._oidc_url, json.dumps(oidc_config), 3600)
-                logger.debug('OIDC config cached successfully')
             return cast(dict, oidc_config)
         except httpx.HTTPStatusError as e:
             logger.exception('Error fetching OIDC config: %s', e)
@@ -121,7 +117,6 @@ class KeycloakOIDC:
         if self._cache:
             cached_key = await self._cache.get(token_kid)
             if cached_key:
-                logger.debug('Key loaded from cache')
                 return jwt.PyJWK(json.loads(cached_key))
 
         jwks = await self._get_jwks()
@@ -131,7 +126,6 @@ class KeycloakOIDC:
 
         if self._cache:
             await self._cache.set(token_kid, json.dumps(public_keys[token_kid]), 3600)
-            logger.debug('Key cached successfully: %s', token_kid)
         return jwt.PyJWK(public_keys[token_kid])
 
     async def _get_jwks(self) -> dict[str, Any]:
@@ -148,11 +142,9 @@ class KeycloakOIDC:
         if self._cache:
             cached_jwks = await self._cache.get(jwks_uri)
             if cached_jwks:
-                logger.debug('JWKS loaded from cache.')
                 return cast(dict[str, Any], json.loads(cached_jwks))
 
         try:
-            logger.debug('Fetching JWKS from URL: %s', jwks_uri)
             response = await self._httpx_client.get(jwks_uri)
             response.raise_for_status()
 
@@ -160,7 +152,6 @@ class KeycloakOIDC:
 
             if self._cache:
                 await self._cache.set(jwks_uri, json.dumps(jwks), 3600)
-                logger.debug('JWKS cached successfully with uri: %s', jwks_uri)
             return cast(dict[str, Any], jwks)
         except httpx.HTTPStatusError as e:
             logger.exception('Error fetching JWKS: %s', e)
@@ -186,7 +177,6 @@ class KeycloakOIDC:
         if self._cache:
             cached_token = await self._cache.get(token)
             if cached_token:
-                logger.debug('Token loaded from cache.')
                 return cast(dict[str, str | list[str]], json.loads(cached_token))
 
         try:
@@ -199,8 +189,6 @@ class KeycloakOIDC:
             raise JWTKidNotFoundException()
 
         pyjwk = await self._get_key_by_kid(token_kid)
-
-        logger.debug('Start Decoding JWT token.')
 
         try:
             decoded_token = jwt.decode(
@@ -217,13 +205,11 @@ class KeycloakOIDC:
                     'require_exp': True,
                 },
             )
-            logger.debug('Token decoded successfully. User: %s', decoded_token['name'])
             current_time = int(time.time())
             exp_time = decoded_token.get('exp', 0)
             ttl = max(0, exp_time - current_time)  # Ensure TTL is never negative
 
             if self._cache:
-                logger.debug('Set token cache with ttl: %s', ttl)
                 await self._cache.set(token, json.dumps(decoded_token), ttl=ttl)
             return cast(dict[str, str | list[str]], decoded_token)
         except jwt.ExpiredSignatureError:
@@ -247,10 +233,8 @@ class KeycloakOIDCFactory:
     @classmethod
     def get_instance(cls) -> KeycloakOIDC:
         if cls._instance is None:
-            logger.debug('Get httpx.AsyncClient singletone')
             httpx_client = HttpxClientSingletoneFactory.get_instance()
             redis = get_redis_connection()
             cache = CustomRedisCache(redis_client=redis, namespace='oidc', ttl=3600)
-            logger.debug('Creating KeycloakOIDC instance with httpx client and cache.')
             cls._instance = KeycloakOIDC(httpx_client=httpx_client, cache=cache)
         return cls._instance

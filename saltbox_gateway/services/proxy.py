@@ -9,9 +9,10 @@ from typing import Annotated
 
 import httpx
 from fastapi import Depends, Request, UploadFile
+from faststream.rabbit import RabbitBroker
 from redis.asyncio import Redis
 
-from saltbox_gateway.config import SETTINGS, logger
+from saltbox_gateway.config import SETTINGS, get_broker, logger
 from saltbox_gateway.dao.service_dao import ServiceDAO, get_service_dao
 from saltbox_gateway.exceptions import (
     ApiProxyRequestException,
@@ -30,6 +31,8 @@ from saltbox_gateway.utils.opa_client import AsyncOpaClient
 from saltbox_gateway.utils.redis_cache import BaseCache, CustomRedisCache
 from saltbox_gateway.utils.redis_config import get_redis
 from saltbox_sdk.discovery_client.schemas import OPAConfig, ServiceEndpoint, ServiceInstance, ServiceSchema
+from saltbox_sdk.event_bus.schemas import AuditCategory, AuditEventSchema, AuditResourceType, AuditSeverity, AuditStatus
+from saltbox_sdk.fastapi_utils.middlewares import get_audit_ctx
 
 
 class ProxyService:
@@ -41,14 +44,16 @@ class ProxyService:
         opa_client: AsyncOpaClient,
         httpx_client: httpx.AsyncClient | None = None,
         cache: BaseCache | None = None,
+        broker: RabbitBroker | None = None,
     ):
         self._request_data = request_data
         self._dao = dao
         self._balancing_factory = balancing_factory
-        self._httpx_client = httpx_client or httpx.AsyncClient(timeout=SETTINGS.proxy_request_timeout)
+        self._httpx_client = httpx_client or httpx.AsyncClient(timeout=SETTINGS.app.proxy_request_timeout)
         self._opa_client = opa_client
         self._cache = cache
         self._server_timing: dict[str, float] = {}
+        self._broker = broker
 
     @classmethod
     async def create(
@@ -59,6 +64,7 @@ class ProxyService:
         opa_client: AsyncOpaClient,
         httpx_client: httpx.AsyncClient | None = None,
         cache: BaseCache | None = None,
+        broker: RabbitBroker | None = None,
     ) -> 'ProxyService':
         """Asynchronous factory method to create a ProxyService instance."""
         raw_body = None
@@ -120,7 +126,7 @@ class ProxyService:
             raw_body=raw_body,
             user=request.state.user,
         )
-        logger.debug(f'Created ProxyRequestData: {request_data}')
+
         return cls(
             request_data=request_data,
             dao=dao,
@@ -128,6 +134,7 @@ class ProxyService:
             opa_client=opa_client,
             httpx_client=httpx_client,
             cache=cache,
+            broker=broker,
         )
 
     async def api_proxy(self, service_name: str, path: str) -> httpx.Response:
@@ -176,6 +183,7 @@ class ProxyService:
             await self._add_response_to_cache(service_response, endpoint.cache_ttl)
 
         if self._server_timing:
+            # TODO: refactor to use Server-Timing consistently across the app
             service_response.headers['Server-Timing'] = ', '.join(
                 f'{k + "_" + service_name if k == "service" else k};dur={v}' for k, v in self._server_timing.items()
             )
@@ -217,11 +225,47 @@ class ProxyService:
                 is_partial=False,
             )
 
+        # HINT: Audit event for OPA check
+        logger.debug(
+            f'Broker is {"configured" if self._broker else "not configured"}, emitting audit event for OPA check'
+        )
+        if self._broker:
+            audit_ctx = get_audit_ctx()
+            if not audit_ctx:
+                logger.warning('Audit context is not set; publishing audit event without request context')
+            event = AuditEventSchema(
+                severity=AuditSeverity.INFO,
+                category=AuditCategory.AUTHZ,
+                action='permission_check',
+                status=AuditStatus.SUCCESS if opa_response.get('allow', False) else AuditStatus.DENIED,
+                subject_id=audit_ctx.subject_id if audit_ctx else None,
+                subject_name=audit_ctx.subject_name if audit_ctx else None,
+                subject_roles=audit_ctx.subject_roles if audit_ctx else [],
+                source_ip=audit_ctx.source_ip if audit_ctx else None,
+                source_service=audit_ctx.service if audit_ctx else 'gateway',
+                correlation_id=audit_ctx.correlation_id if audit_ctx else None,
+                resource_type=AuditResourceType.API_ENDPOINT,
+                resource_path=path,
+                details={
+                    'policy': opa_config.policy,
+                    'policy_action': opa_config.action,
+                    'decision': 'allowed' if opa_response.get('allow', False) else 'denied',
+                    'query_filter': opa_response.get('query'),
+                    'filter_applied': opa_response.get('query') is not None,
+                    'http_method': self._request_data.method,
+                    'service_name': service_name,
+                },
+            )
+            logger.info(f'Publishing audit event for OPA check: {event.correlation_id}')
+            await self._broker.publish(
+                event,
+                'audit_events',
+            )
+
         if not opa_response.get('allow', False):
             raise NotEnoughPermissionsException(service_name=service_name, path=path, action=opa_config.action)
         if opa_response.get('query') is not None:
             self._add_query_param('opa_query', json.dumps(opa_response['query']))
-            logger.debug(f'Added OPA query to request: {opa_response["query"]}')
 
         opa_response_timer_end = time.perf_counter()
         self._server_timing['opa'] = round((opa_response_timer_end - opa_response_timer_start) * 1000, 2)
@@ -251,7 +295,6 @@ class ProxyService:
                 'body': self._request_data.body,
             },
         }
-        logger.debug(f'Preparing OPA input: {data}')
         return data
 
     def _is_response_cachable(self, response: httpx.Response) -> bool:
@@ -292,7 +335,6 @@ class ProxyService:
                 except Exception as e:
                     logger.warning(f'Error parsing cached response: {e}')
                     return None
-            logger.debug(f'Cache hit for key: {self._request_data.cache_key}')
             # Фильтруем hop-by-hop заголовки и сбрасываем content-length
             hop_by_hop = {
                 'connection',
@@ -316,31 +358,45 @@ class ProxyService:
                 return None
 
             status_code = int((cached_response or {}).get('status_code', 200))
-            logger.debug(f'Returning cached response with status code: {status_code}')
             return httpx.Response(
                 status_code=status_code,
                 headers=headers,
                 content=content,
             )
-        logger.debug(f'Cache miss for key: {self._request_data.cache_key}')
         return None
 
     def _build_proxy_headers(self) -> dict:
         headers = self._request_data.headers.copy()
         user = self._request_data.user
         headers['X-User-Id'] = str(user.sub)
+        headers['X-User-Name'] = user.name
         headers['X-User-Email'] = user.email
         headers['X-User-Email-Verified'] = str(user.email_verified)
-        headers['X-User-Name'] = user.name
+        headers['X-User-Roles'] = ','.join(user.roles)
         headers['Via'] = self.append_via_header(headers.get('via'))
+
+        audit_ctx = get_audit_ctx()
+        correlation_id = audit_ctx.correlation_id if audit_ctx else None
+        source_ip = audit_ctx.source_ip if audit_ctx else 'unknown'
+        headers['X-User-Ip'] = source_ip if source_ip else 'unknown'
+        if correlation_id:
+            headers['X-Request-ID'] = correlation_id
+
+        # TODO: Maybe we should send it through a header, not query param, to avoid issues with URL length?
+        # Should be base64-encoded JSON
+        # headers['X-OPA-Filter'] = json.dumps({'query': opa_response.get('query')})
 
         return headers
 
     async def _get_response_from_service(self, url: str) -> httpx.Response:
         service_response_timer_start = time.perf_counter()
         headers = self._build_proxy_headers()
-        retries = SETTINGS.proxy_retries if self._request_data.method in SETTINGS.proxy_retry_idempotent_methods else 0
-        backoff = SETTINGS.proxy_retry_backoff_base
+        retries = (
+            SETTINGS.app.proxy_retries
+            if self._request_data.method in SETTINGS.app.proxy_retry_idempotent_methods
+            else 0
+        )
+        backoff = SETTINGS.app.proxy_retry_backoff_base
         for attempt in range(retries + 1):
             try:
                 response = await self._httpx_client.request(
@@ -358,7 +414,7 @@ class ProxyService:
                     continue
                 raise ApiProxyRequestException(detail=str(e)) from e
 
-            if response.status_code in SETTINGS.proxy_retry_on_status and attempt < retries:
+            if response.status_code in SETTINGS.app.proxy_retry_on_status and attempt < retries:
                 await asyncio.sleep(backoff)
                 backoff *= 2
                 continue
@@ -396,7 +452,9 @@ class ProxyService:
         }
 
         static_response = await self._httpx_client.get(
-            url, headers=hdrs, params=self._request_data.query_params,
+            url,
+            headers=hdrs,
+            params=self._request_data.query_params,
         )
 
         if static_response.is_error:
@@ -487,11 +545,12 @@ async def get_proxy_service(
     request: Request,
     dao: Annotated[ServiceDAO, Depends(get_service_dao)],
     redis_client: Annotated[Redis, Depends(get_redis)],
+    broker: Annotated[RabbitBroker, Depends(get_broker)],
 ) -> ProxyService:
     httpx_client = HttpxClientSingletoneFactory.get_instance()
     balancing_factory = balancing_strategy_factory(redis_client)
     cache = CustomRedisCache(redis_client=redis_client, namespace='gate_cache')
-    opa_client = AsyncOpaClient(url=SETTINGS.opa_url, client=httpx_client)
+    opa_client = AsyncOpaClient(url=SETTINGS.app.opa_url, client=httpx_client)
     return await ProxyService.create(
         request=request,
         dao=dao,
@@ -499,4 +558,5 @@ async def get_proxy_service(
         httpx_client=httpx_client,
         opa_client=opa_client,
         cache=cache,
+        broker=broker,
     )

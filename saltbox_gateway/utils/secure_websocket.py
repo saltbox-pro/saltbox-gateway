@@ -48,15 +48,6 @@ class IsSocketDisconnected(AbstractContextManager):
             return True
         if issubclass(exttype, WebSocketDisconnect):
             self.is_excepted = True
-            client = self.websocket.client
-            if not client:
-                logger.debug('/ws_jobs websocket has been disconnected')
-            else:
-                logger.debug(
-                    '/ws_jobs websocket for %s:%i has been disconnected',
-                    client.host,
-                    client.port,
-                )
             return True
         return False
 
@@ -74,7 +65,6 @@ def _check_ws_connection(fn: Callable[..., Any]) -> Callable[..., Any]:
         if self._already_closed:
             raise WebSocketDisconnect
         if self.token_expiration and datetime.datetime.now(datetime.UTC) >= self.token_expiration:
-            logger.debug('Token expired: %s', self.token_expiration)
             await self.close('Token expired')
             raise WebSocketDisconnect
         return await fn(self, *args, **kwargs)
@@ -109,8 +99,6 @@ class AuthenticatedWebSocket:
 
     @property
     def _already_closed(self) -> bool:
-        logger.debug('Server state: %s', self.websocket.application_state)
-        logger.debug('Client state: %s', self.websocket.client_state)
         return (
             self.websocket.application_state == WebSocketState.DISCONNECTED
             or self.websocket.client_state == WebSocketState.DISCONNECTED
@@ -118,7 +106,6 @@ class AuthenticatedWebSocket:
 
     @_check_ws_connection
     async def _obtain_token_msg(self) -> None:
-        logger.debug('Await token message')
         message = await self.websocket.receive_text()
         # TODO (a.baikov): temporary solution until we get full token from client
         message = 'Bearer ' + message
@@ -145,11 +132,9 @@ class AuthenticatedWebSocket:
 
     async def _token_refresher_task_manager(self) -> None:
         while not self._already_closed:
-            logger.debug('Start token refresher task')
             token_refresher_task = asyncio.create_task(self._token_refresher())
             self._subtasks.add(token_refresher_task)
             try:
-                logger.debug('Await token refresher task')
                 await token_refresher_task
             except WebSocketDisconnect:
                 await self.close('WebSocket disconnected')
@@ -158,7 +143,6 @@ class AuthenticatedWebSocket:
             finally:
                 self._subtasks.remove(token_refresher_task)
                 token_refresher_task.cancel()
-                logger.debug('Token_refresher_task cancelled')
                 await asyncio.sleep(1)
 
     @_check_ws_connection
@@ -170,7 +154,6 @@ class AuthenticatedWebSocket:
             await self._obtain_token_msg()
 
     async def close(self, msg: str) -> None:
-        logger.debug('Cancel all subtasks: %s', self._subtasks)
         for task in self._subtasks:
             task.cancel()
 
@@ -273,7 +256,6 @@ class PubSubAuthenticatedWebSocket(AuthenticatedWebSocket):
             await pubsub.psubscribe(handler.channel)
             async for message in pubsub.listen():
                 if self._already_closed:
-                    logger.debug('Cant forward msg - Websocket already closed')
                     break
                 if message['type'] not in PubSub.PUBLISH_MESSAGE_TYPES:
                     continue
@@ -282,8 +264,6 @@ class PubSubAuthenticatedWebSocket(AuthenticatedWebSocket):
 
                 if handler_result or handler.send_empty:
                     await self.send_text(json.dumps({'message_tag': handler.message_tag, 'payload': handler_result}))
-
-        logger.debug('Exit from _message_forwarder')
 
     async def handle_pubsub(self, handlers: list[PubSubMessageHandler]) -> None:
         await self.accept()
@@ -296,7 +276,6 @@ class PubSubAuthenticatedWebSocket(AuthenticatedWebSocket):
         try:
             await asyncio.gather(*channel_tasks)
         except WebSocketDisconnect:
-            logger.debug('Close in handle_pubsub')
             await self.close('WebSocket disconnected')
         except asyncio.CancelledError:
-            logger.debug('Catch asyncio.CancelledError in handle_pubsub')
+            pass

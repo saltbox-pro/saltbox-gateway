@@ -1,9 +1,9 @@
 import re
 from collections.abc import Awaitable, Callable
-from contextvars import ContextVar
 
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse
+from pydantic import ValidationError
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 
@@ -13,7 +13,6 @@ from saltbox_gateway.utils.keycloak_oidc import KeycloakOIDCFactory
 from saltbox_sdk.db.schemas_base import ANONYMOUS_USER, User
 
 RequestResponseEndpoint = Callable[[Request], Awaitable[Response]]
-request_context: ContextVar[Request] = ContextVar('request_context')
 
 
 class AuthMiddleware(BaseHTTPMiddleware):
@@ -25,32 +24,31 @@ class AuthMiddleware(BaseHTTPMiddleware):
         super().__init__(app)
         logger.debug('Initializing AuthMiddleware.')
         self._oidc = KeycloakOIDCFactory.get_instance()
-
-        if excluded_paths is not None:
-            self.excluded_paths = [re.compile(f'^{path}$') for path in excluded_paths]
-        else:
-            self.excluded_paths = []
+        self._excluded = [re.compile(f'^{p}$') for p in (excluded_paths or [])]
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
+        # logger.debug('\n\n\n\n====================\n')
         logger.debug('Dispatching request: %s', request.url.path)
-        request.state.user = ANONYMOUS_USER
-        if self.in_excludes(request.url.path) or request.method == 'OPTIONS':
-            return await call_next(request)
-
-        token = request.headers.get('Authorization')
 
         try:
-            decoded_token = await self._oidc.decode_jwt(token)
-            request.state.user = User(**decoded_token)
-        except KeycloakOIDCException as e:
-            return JSONResponse(status_code=e.status_code, content={'detail': e.detail})
+            if self._is_excluded(request.url.path) or request.method == 'OPTIONS':
+                request.state.user = ANONYMOUS_USER
+                return await call_next(request)
 
-        request_context.set(request)
-        response = await call_next(request)
-        return response
+            token = request.headers.get('Authorization')
+            try:
+                decoded = await self._oidc.decode_jwt(token)
+                user = User(**decoded)
+            except ValidationError:
+                return JSONResponse(status_code=401, content={'detail': 'Token validation error'})
+            except KeycloakOIDCException as e:
+                return JSONResponse(status_code=e.status_code, content={'detail': e.detail})
 
-    def in_excludes(self, value: str) -> bool:
-        for pattern in self.excluded_paths:
-            if pattern.match(value):
-                return True
-        return False
+            request.state.user = user
+            logger.warning('User added to request state: %s', user.name)
+            return await call_next(request)
+        finally:
+            request.state.user = None
+
+    def _is_excluded(self, path: str) -> bool:
+        return any(p.match(path) for p in self._excluded)

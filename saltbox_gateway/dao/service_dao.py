@@ -101,7 +101,7 @@ class ServiceDAO:
         await self.redis_client.hset(
             service_key, mapping={'data': json.dumps(service_data), 'last_updated': time.time()}
         )
-        await self.redis_client.expire(service_key, SETTINGS.service_registration_ttl)
+        await self.redis_client.expire(service_key, SETTINGS.app.service_registration_ttl)
         saved_service = await self.redis_client.hgetall(service_key)
 
         if not saved_service:

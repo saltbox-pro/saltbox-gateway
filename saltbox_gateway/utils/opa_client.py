@@ -77,10 +77,7 @@ class AsyncOpaClient:
         data = {
             'input': input,
         }
-        logger.info('OPA check policy request data: %s', data)
-        logger.debug('OPA check policy request url: %s', url)
         response = await self._client.post(url, json=data, timeout=self.timeout)
-        logger.debug('OPA check policy response: %s', response.content)
         if not response.is_success:
             raise OpaRequestException(response.text)
         result = response.json().get('result', {})
@@ -111,11 +108,7 @@ class AsyncOpaClient:
             'unknowns': ['data.' + u for u in unknowns],
         }
 
-        logger.info('OPA compile request data: %s', data)
-        logger.debug('OPA compile request url: %s', url)
-
         response = await self._client.post(url, json=data, timeout=self.timeout)
-        logger.debug('OPA compile response: %s', response.content)
         if not response.is_success:
             raise OpaRequestException(response.text)
 
@@ -136,7 +129,6 @@ class AsyncOpaClient:
             return {'allow': True, 'query': None}
 
         query_set = ast.QuerySet.from_data(queries)
-        logger.debug('AST rego: %s', query_set)
 
         if format == OPAQueryFilterFormat.MONGO:
             return await self._compile_to_mongo(query_set)
@@ -147,7 +139,6 @@ class AsyncOpaClient:
         query_set.preprocess()
         visitor = MongoQueryVisitor()
         query = visitor.visit(query_set)
-        logger.debug('Mongo query: %s', query)
 
         return {'allow': True, 'query': query}
 
@@ -155,9 +146,7 @@ class AsyncOpaClient:
         """Compile a query to SQL."""
         sql_visitor = SQLQueryVisitor(from_table='collections')
         clauses = sql_visitor.visit(query_set)
-        logger.debug('SQL clauses: %s', clauses)
         query = sql.build_sql_query(select='collections.*', from_table='collections', clauses=clauses)
-        logger.debug('SQL query: %s', query)
 
         return {'allow': True, 'query': query}
 
@@ -165,4 +154,4 @@ class AsyncOpaClient:
 def get_opa_client() -> AsyncOpaClient:
     """Get an instance of the OPA client."""
     httpx_client = HttpxClientSingletoneFactory.get_instance()
-    return AsyncOpaClient(url=SETTINGS.opa_url, client=httpx_client)
+    return AsyncOpaClient(url=SETTINGS.app.opa_url, client=httpx_client)
