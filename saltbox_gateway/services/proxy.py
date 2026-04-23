@@ -31,7 +31,14 @@ from saltbox_gateway.utils.opa_client import AsyncOpaClient
 from saltbox_gateway.utils.redis_cache import BaseCache, CustomRedisCache
 from saltbox_gateway.utils.redis_config import get_redis
 from saltbox_sdk.discovery_client.schemas import OPAConfig, ServiceEndpoint, ServiceInstance, ServiceSchema
-from saltbox_sdk.event_bus.schemas import AuditCategory, AuditEventSchema, AuditResourceType, AuditSeverity, AuditStatus
+from saltbox_sdk.event_bus.schemas import (
+    AuditCategory,
+    AuditEventSchema,
+    AuditResourceType,
+    AuditSeverity,
+    AuditStatus,
+    AuditSubjectType,
+)
 from saltbox_sdk.fastapi_utils.middlewares import get_audit_ctx
 
 
@@ -239,6 +246,7 @@ class ProxyService:
                 action='permission_check',
                 status=AuditStatus.SUCCESS if opa_response.get('allow', False) else AuditStatus.DENIED,
                 subject_id=audit_ctx.subject_id if audit_ctx else None,
+                subject_type=audit_ctx.subject_type if audit_ctx else AuditSubjectType.SYSTEM,
                 subject_name=audit_ctx.subject_name if audit_ctx else None,
                 subject_roles=audit_ctx.subject_roles if audit_ctx else [],
                 source_ip=audit_ctx.source_ip if audit_ctx else None,
