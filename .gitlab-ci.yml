@@ -68,6 +68,7 @@ mypy:
 Trigger API Client build:
   stage: build
   variables:
+    SALTBOX_ENV_FILE: 'tests/test.env'
     MODULE_NAME: saltbox_gateway
     GEN_OPENAPI_CMD: python3 "./${MODULE_NAME}/utils/generate_openapi.py"
   trigger:
