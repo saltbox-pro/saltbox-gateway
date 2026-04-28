@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Annotated, Any, Literal, TypeVar
 
-from pydantic import AfterValidator, BaseModel, Field, PlainSerializer
+from pydantic import AfterValidator, BaseModel, Field, JsonValue, PlainSerializer
 
 from saltbox_gateway.tmp_ws_proxy.errors import JidError
 from saltbox_gateway.tmp_ws_proxy.utils import JID
@@ -265,6 +265,7 @@ class TaskMinionsCountAggregation(BaseModel):
 
 class TaskAggregatedFieldsMixin:
     minions_count: TaskMinionsCountAggregation = Field()
+    pillars: dict[str, JsonValue] = Field(title='Pillars', default_factory=dict)
 
 
 class TaskComputedFieldsMixin: ...
