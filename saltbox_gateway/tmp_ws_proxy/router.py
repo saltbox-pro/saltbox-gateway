@@ -50,6 +50,8 @@ async def job_info_endpoint_websocket(
         handlers=[
             PubSubMessageHandler(f'job:{jid}:create', 'job', schema=JobModel),
             PubSubMessageHandler(f'job:{jid}:update', 'job', schema=JobModel),
+            PubSubMessageHandler(f'job-return:{jid}:create', 'job-return', schema=JobReturnModel),
+            PubSubMessageHandler(f'job-return:{jid}:update', 'job-return', schema=JobReturnModel),
         ]
     )
 
