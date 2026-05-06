@@ -6,7 +6,7 @@ from redis.asyncio import Redis
 from saltbox_gateway.exceptions import SecureWebSocketPolicyException
 from saltbox_gateway.services.discovery import DiscoveryService, get_discovery_service
 from saltbox_gateway.tmp_ws_proxy.dao import JobDao, TaskDao
-from saltbox_gateway.tmp_ws_proxy.schemas import IntJid, JobModel, JobReturnModel, TaskMinionModel, TaskModel
+from saltbox_gateway.tmp_ws_proxy.schemas import IntJid, JobModel, JobReturnNotifySchema, TaskMinionModel, TaskModel
 from saltbox_gateway.tmp_ws_proxy.utils import JID
 from saltbox_gateway.utils.opa_client import get_opa_client
 from saltbox_gateway.utils.secure_websocket import PubSubAuthenticatedWebSocket, PubSubMessageHandler
@@ -50,8 +50,8 @@ async def job_info_endpoint_websocket(
         handlers=[
             PubSubMessageHandler(f'job:{jid}:create', 'job', schema=JobModel),
             PubSubMessageHandler(f'job:{jid}:update', 'job', schema=JobModel),
-            PubSubMessageHandler(f'job-return:{jid}:create', 'job-return', schema=JobReturnModel),
-            PubSubMessageHandler(f'job-return:{jid}:update', 'job-return', schema=JobReturnModel),
+            PubSubMessageHandler(f'job-return:{jid}:create', 'job-return', schema=JobReturnNotifySchema),
+            PubSubMessageHandler(f'job-return:{jid}:update', 'job-return', schema=JobReturnNotifySchema),
         ]
     )
 
@@ -74,8 +74,8 @@ async def jobs_endpoint_websocket(
     secure_websocket = PubSubAuthenticatedWebSocket(websocket, rdb)
     await secure_websocket.handle_pubsub(
         handlers=[
-            PubSubMessageHandler(f'job-return:{jid}:create', 'job-return', schema=JobReturnModel),
-            PubSubMessageHandler(f'job-return:{jid}:update', 'job-return', schema=JobReturnModel),
+            PubSubMessageHandler(f'job-return:{jid}:create', 'job-return', schema=JobReturnNotifySchema),
+            PubSubMessageHandler(f'job-return:{jid}:update', 'job-return', schema=JobReturnNotifySchema),
         ]
     )
 
@@ -111,8 +111,8 @@ async def task_websocket(
     secure_websocket = PubSubAuthenticatedWebSocket(websocket, rdb)
     await secure_websocket.handle_pubsub(
         handlers=[
-            PubSubMessageHandler(f'task:{tid}:job-return:*:create', 'job-return', schema=JobReturnModel),
-            PubSubMessageHandler(f'task:{tid}:job-return:*:update', 'job-return', schema=JobReturnModel),
+            PubSubMessageHandler(f'task:{tid}:job-return:*:create', 'job-return', schema=JobReturnNotifySchema),
+            PubSubMessageHandler(f'task:{tid}:job-return:*:update', 'job-return', schema=JobReturnNotifySchema),
             PubSubMessageHandler(f'task:{tid}:task-minion:*:create', 'task-minion', schema=TaskMinionModel),
             PubSubMessageHandler(f'task:{tid}:task-minion:*:update', 'task-minion', schema=TaskMinionModel),
             PubSubMessageHandler(f'task:{tid}:update', 'task', schema=TaskModel),

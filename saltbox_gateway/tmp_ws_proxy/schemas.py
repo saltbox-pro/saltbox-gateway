@@ -118,7 +118,7 @@ class JobSimpleSchema(BaseModel, IDMixin):
     status: JobStatus
 
 
-# JobReturn schemas
+# Job returns
 
 
 class JobReturnStatus(StrEnum):
@@ -152,15 +152,29 @@ class JobReturnAggregatedFieldsMixin:
     success: bool | None = None
 
 
+class JobReturnDataMixin:
+    data: Any = Field(default=None)
+
+
 class JobReturnModel(
     BaseModel,
     JobReturnAggregatedFieldsMixin,
     CreatedModifiedMixin,
     JobReturnReadOnlyFieldsMixin,
     JobReturnEditableFieldsMixin,
+    JobReturnDataMixin,
     IDMixin,
-):
-    data: Any = Field(default=None)
+): ...
+
+
+class JobReturnNotifySchema(
+    BaseModel,
+    JobReturnAggregatedFieldsMixin,
+    CreatedModifiedMixin,
+    JobReturnReadOnlyFieldsMixin,
+    JobReturnEditableFieldsMixin,
+    IDMixin,
+): ...
 
 
 # Task-related schemas
