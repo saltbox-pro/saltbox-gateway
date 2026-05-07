@@ -6,6 +6,7 @@ import time
 from collections import defaultdict
 from collections.abc import Callable
 from typing import Annotated
+from urllib.parse import quote
 
 import httpx
 from fastapi import Depends, Request, UploadFile
@@ -377,7 +378,7 @@ class ProxyService:
         headers = self._request_data.headers.copy()
         user = self._request_data.user
         headers['X-User-Id'] = str(user.sub)
-        headers['X-User-Name'] = user.name
+        headers['X-User-Name'] = quote(user.name)
         headers['X-User-Email'] = user.email
         headers['X-User-Email-Verified'] = str(user.email_verified)
         headers['X-User-Roles'] = ','.join(user.roles)
