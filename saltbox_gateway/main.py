@@ -1,7 +1,6 @@
 import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from functools import partial
 from typing import Any
 
 from fastapi import FastAPI
@@ -63,7 +62,13 @@ app_config: dict[str, Any] = {
 
 app_config = patch_swagger_config(app_config)
 
-app = FastAPI(**app_config)
+
+class _App(FastAPI):
+    def openapi(self) -> dict[str, Any]:
+        return custom_openapi(self, app_config)
+
+
+app = _App(**app_config)
 
 app.add_middleware(
     AuditContextMiddleware,
@@ -80,7 +85,9 @@ app.add_middleware(
     + [r'/static/(.*)']
     + [r'/metrics']
     + [r'/api/discovery(?:/.*)?$']
-    + [r'/api/core/system/[\w-]+/authorized_keys'],
+    + [r'/api/core/system/[\w-]+/authorized_keys']
+    + [r'/api/core/task-tpl-sources(?:/.*)?$']
+    + [r'/api/core/task-tpls(?:/.*)?$'],
 )
 
 app.add_middleware(
@@ -103,6 +110,3 @@ app.include_router(proxy_router, include_in_schema=False)
 app.include_router(static_proxy_router, include_in_schema=False)
 app.include_router(ws_core_jobs_router, include_in_schema=False)
 app.include_router(ws_core_tasks_router, include_in_schema=False)
-
-
-app.openapi = partial(custom_openapi, app, app_config)  # type: ignore[method-assign]

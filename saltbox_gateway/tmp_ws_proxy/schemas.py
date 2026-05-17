@@ -20,7 +20,7 @@ TASKS_DEFAULTS_MAX_RETRIES = 0
 TASKS_DEFAULTS_RETRY_DELAY = 10
 
 
-class IDMixin:
+class IDMixin(BaseModel):
     id: PyObjectId = Field(title='ID', serialization_alias='id')
 
 
@@ -60,7 +60,7 @@ class JobStatus(StrEnum):
     launch_error = 'launch_error'
 
 
-class JobReadOnlyFieldsMixin:
+class JobReadOnlyFieldsMixin(BaseModel):
     tgt: str | list[str]
     tgt_type: SaltTgtType
     salt_master: str
@@ -74,7 +74,7 @@ class JobReadOnlyFieldsMixin:
     source: Source | None = None
 
 
-class JobEditableFieldsMixin:
+class JobEditableFieldsMixin(BaseModel):
     system_user: str | None = None
     minions: list[str] = Field(default=[])
     missing: list[str] = Field(default=[])
@@ -83,7 +83,7 @@ class JobEditableFieldsMixin:
     launch_error_type: str | None = None
 
 
-class JobComputedFieldsMixin: ...
+class JobComputedFieldsMixin(BaseModel): ...
 
 
 class JobMinionsCountAggregation(BaseModel):
@@ -95,13 +95,12 @@ class JobMinionsCountAggregation(BaseModel):
     ignored: int = Field(title='Ignored', default=0)
 
 
-class JobAggregateFieldsMixin:
+class JobAggregateFieldsMixin(BaseModel):
     minions_count: JobMinionsCountAggregation = Field()
     waiting_expires_at_dt: datetime
 
 
 class JobModel(
-    BaseModel,
     CreatedModifiedMixin,
     JobReadOnlyFieldsMixin,
     JobEditableFieldsMixin,
@@ -112,7 +111,7 @@ class JobModel(
     jid: StrJid
 
 
-class JobSimpleSchema(BaseModel, IDMixin):
+class JobSimpleSchema(IDMixin):
     jid: StrJid
     salt_master: str
     status: JobStatus
@@ -129,7 +128,7 @@ class JobReturnStatus(StrEnum):
     ignored = 'ignored'
 
 
-class JobReturnReadOnlyFieldsMixin:
+class JobReturnReadOnlyFieldsMixin(BaseModel):
     minion_id: str
     salt_master: str
     jid: StrJid
@@ -138,7 +137,7 @@ class JobReturnReadOnlyFieldsMixin:
     source: Source | None = None
 
 
-class JobReturnEditableFieldsMixin:
+class JobReturnEditableFieldsMixin(BaseModel):
     status: JobReturnStatus = Field(default=JobReturnStatus.waiting)
     retcode: int | None = None
     fun_args: list | None = None
@@ -148,16 +147,15 @@ class JobReturnEditableFieldsMixin:
     stamp_job: TimezoneAwareDatetime | None = Field(default=None)
 
 
-class JobReturnAggregatedFieldsMixin:
+class JobReturnAggregatedFieldsMixin(BaseModel):
     success: bool | None = None
 
 
-class JobReturnDataMixin:
+class JobReturnDataMixin(BaseModel):
     data: Any = Field(default=None)
 
 
 class JobReturnModel(
-    BaseModel,
     JobReturnAggregatedFieldsMixin,
     CreatedModifiedMixin,
     JobReturnReadOnlyFieldsMixin,
@@ -168,7 +166,6 @@ class JobReturnModel(
 
 
 class JobReturnNotifySchema(
-    BaseModel,
     JobReturnAggregatedFieldsMixin,
     CreatedModifiedMixin,
     JobReturnReadOnlyFieldsMixin,
@@ -202,7 +199,7 @@ class TaskTemplateDefaultsSchema(BaseModel):
     ttl: int | None = Field(ge=0, le=JOBS_MAX_TTL, default=None)
 
 
-class TaskTemplateShort(BaseModel, IDMixin):
+class TaskTemplateShort(IDMixin):
     id: PyObjectId = Field(title='ID', serialization_alias='id')
     title: str = Field(title='Template title')
     name: str = Field(title='Template name')
@@ -211,17 +208,17 @@ class TaskTemplateShort(BaseModel, IDMixin):
     defaults: TaskTemplateDefaultsSchema | None = Field(title='Default values', default=None)
 
 
-class CollectionShort(BaseModel, IDMixin):
+class CollectionShort(IDMixin):
     slug: str = Field(title='Collection slug')
     title: str = Field(title='Collection title')
 
 
-class TaskStatusShort(BaseModel, CreatedModifiedMixin):
+class TaskStatusShort(CreatedModifiedMixin):
     type: TaskStatus = Field(title='Status')
     data: dict = Field(title='Status data', default_factory=dict)
 
 
-class TaskReadOnlyFieldsMixin:
+class TaskReadOnlyFieldsMixin(BaseModel):
     task_type: TaskType = Field(title='Task type')
 
     target_collection_id: PyObjectId = Field(title='Target ID')
@@ -237,7 +234,7 @@ class TaskReadOnlyFieldsMixin:
     source: Source | None = Field(title='Source', default=None)
 
 
-class TaskEditableFieldsMixin:
+class TaskEditableFieldsMixin(BaseModel):
     batch_size: int = Field(title='Batch size', ge=0, default=TASKS_DEFAULTS_BATCH_SIZE)
     max_jobs_count_at_same_time: int = Field(
         title='Max jobs count at some time', ge=1, default=TASKS_DEFAULTS_MAX_JOBS_COUNT_AT_SAME_TIME
@@ -250,21 +247,21 @@ class TaskEditableFieldsMixin:
     last_sync_dt: TimezoneAwareDatetime | None = Field(title='Last sync datetime', default=None)
 
 
-class TaskTemplateJoinedFieldsMixin:
+class TaskTemplateJoinedFieldsMixin(BaseModel):
     task_template: TaskTemplateShort | None = Field(title='Task template', default=None)
 
 
-class TaskTargetCollectionJoinedFieldsMixin:
+class TaskTargetCollectionJoinedFieldsMixin(BaseModel):
     target_collection: CollectionShort = Field(title='Target collection')
 
 
-class TaskStatusJoinedFieldsMixin:
+class TaskStatusJoinedFieldsMixin(BaseModel):
     status: TaskStatusShort = Field(
         title='Status', default=TaskStatusShort(type=TaskStatus.created, created=utc_now(), modified=utc_now())
     )
 
 
-class TaskJobJoinedFieldsMixin[TaskJobJoinedSchema: BaseModel]:
+class TaskJobJoinedFieldsMixin[TaskJobJoinedSchema: BaseModel](BaseModel):
     jobs: list[TaskJobJoinedSchema] = Field(title='Jobs', default=[])
 
 
@@ -277,16 +274,15 @@ class TaskMinionsCountAggregation(BaseModel):
     failed: int = Field(title='Failed', default=0)
 
 
-class TaskAggregatedFieldsMixin:
+class TaskAggregatedFieldsMixin(BaseModel):
     minions_count: TaskMinionsCountAggregation = Field()
     pillars: dict[str, JsonValue] = Field(title='Pillars', default_factory=dict)
 
 
-class TaskComputedFieldsMixin: ...
+class TaskComputedFieldsMixin(BaseModel): ...
 
 
 class TaskModel(
-    BaseModel,
     CreatedModifiedMixin,
     TaskTemplateJoinedFieldsMixin,
     TaskTargetCollectionJoinedFieldsMixin,
@@ -310,12 +306,12 @@ class TaskMinionStatus(StrEnum):
     failed = 'failed'
 
 
-class TaskMinionReadOnlyFieldsMixin:
+class TaskMinionReadOnlyFieldsMixin(BaseModel):
     task_id: PyObjectId = Field(title='Task ID')
     minion_inner_id: PyObjectId = Field(title='Minion Mongo ID')
 
 
-class TaskMinionEditableFieldsMixin:
+class TaskMinionEditableFieldsMixin(BaseModel):
     status: TaskMinionStatus = Field(title='Status', default=TaskMinionStatus.pending)
 
     start_last_dt: TimezoneAwareDatetime | None = Field(title='Last job start dt', default=None)
@@ -323,7 +319,7 @@ class TaskMinionEditableFieldsMixin:
     check_unactive_last_job_dt: TimezoneAwareDatetime | None = Field(title='Last check unactive dt', default=None)
 
 
-class TaskMinionJoinedFieldsMixin:
+class TaskMinionJoinedFieldsMixin(BaseModel):
     minion_id: str = Field(title='Minion ID')
     master: str = Field(title='Master')
     last_activity: TimezoneAwareDatetime | None = Field(title='Last activity', default=None)
@@ -332,7 +328,6 @@ class TaskMinionJoinedFieldsMixin:
 
 
 class TaskMinionModel(
-    BaseModel,
     TaskMinionJoinedFieldsMixin,
     CreatedModifiedMixin,
     TaskMinionReadOnlyFieldsMixin,

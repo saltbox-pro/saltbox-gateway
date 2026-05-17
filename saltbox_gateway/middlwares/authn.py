@@ -38,7 +38,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             token = request.headers.get('Authorization')
             try:
                 decoded = await self._oidc.decode_jwt(token)
-                user = User(**decoded)
+                user = User.model_validate(decoded)
             except ValidationError:
                 return JSONResponse(status_code=401, content={'detail': 'Token validation error'})
             except KeycloakOIDCException as e:

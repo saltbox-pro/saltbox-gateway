@@ -22,7 +22,6 @@ from saltbox_sdk.discovery_client.schemas import (
     ProxyBalancingStrategy,
     ServiceInstance,
     ServiceSchema,
-    ServiceType,
 )
 
 
@@ -38,7 +37,7 @@ class DiscoveryService:
         return ServiceSchema(**service_data.get('data', {}))
 
     async def process(self, service: ServiceSchema) -> ServiceSchema:
-        if service.type == ServiceType.OFFICIAL:
+        if service.type == 'official':
             if service.name not in SETTINGS.app.official_modules:
                 raise NonOfficialServiceException(service.name)
 

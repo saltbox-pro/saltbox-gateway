@@ -114,7 +114,7 @@ class AuthenticatedWebSocket:
     async def _process_token_message(self, token: str) -> None:
         try:
             payload = await self._oidc.decode_jwt(token)
-            self.user = User(**payload)
+            self.user = User.model_validate(payload)
             exp = cast(float, payload.get('exp'))
             self.token_expiration = datetime.datetime.fromtimestamp(exp, datetime.UTC)
         except KeycloakOIDCException as e:

@@ -135,6 +135,9 @@ class AsyncOpaClient:
         if format == OPAQueryFilterFormat.SQL:
             return await self._compile_to_sql(query_set)
 
+        msg = f'Unsupported query filter format: {format}'  # type: ignore[unreachable]
+        raise ValueError(msg)
+
     async def _compile_to_mongo(self, query_set: ast.QuerySet) -> dict:
         query_set.preprocess()
         visitor = MongoQueryVisitor()

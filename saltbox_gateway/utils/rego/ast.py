@@ -119,9 +119,8 @@ class Term(RegoASTNode):
 
     @classmethod
     def from_data(cls, data: dict[str, Any]) -> 'Term':
-        if data['type'] == 'null':
-            data['value'] = None
-        return cls(_VALUE_MAP[data['type']].from_data(data['value']))
+        value: Any = None if data['type'] == 'null' else data['value']
+        return cls(_VALUE_MAP[data['type']].from_data(value))
 
     def __str__(self) -> str:
         return str(self.value)
