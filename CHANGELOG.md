@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+
+## [0.2.1] - 2026-05-21
+
+### Added
+
+- Add `pillars` field to task WebSocket schema
+- Add job return messages to `job/info` WebSocket endpoint
+- Add `subject_type` field to audit event in `ProxyService`
+- Add RabbitMQ env stubs to `tests/test.env` and CI
+- Add task-tpl-sources and task-tpls paths to auth whitelist
+
+### Changed
+
+- Refactor configuration to use new `AppSettings` class; adjust service registration and health check logic
+- Add audit event publishing in `ProxyService`
+- Enhance `AuthMiddleware` logging and error handling; remove unused `RequestIDMiddleware`
+- Update `JobReturnNotifySchema` to serialize job return messages
+- URL-encode user name in `X-User-Name` proxy header via `urllib.parse.quote`
+- Replace `functools.partial` monkey-patching with proper `_App` subclass override for `openapi()` in `main.py`
+- Update SDK dependency version (multiple commits)
+
+### Fixed
+
+- Fix schema mixin classes to inherit from `BaseModel` explicitly for correct MRO with new SDK version (SBX-446)
+
+
 ## [0.2.0] - 2026-04-06
 
 ### Added
