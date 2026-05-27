@@ -17,6 +17,7 @@ from saltbox_gateway.config import SETTINGS, get_broker, logger
 from saltbox_gateway.dao.service_dao import ServiceDAO, get_service_dao
 from saltbox_gateway.exceptions import (
     ApiProxyRequestException,
+    ApiProxyRequestTimeoutException,
     NotEnoughPermissionsException,
     ProxyStaticFileException,
     ServiceDisabledException,
@@ -421,6 +422,10 @@ class ProxyService:
                     await asyncio.sleep(backoff)
                     backoff *= 2
                     continue
+
+                if isinstance(e, httpx.TimeoutException):
+                    raise ApiProxyRequestTimeoutException(detail=str(e)) from e
+
                 raise ApiProxyRequestException(detail=str(e)) from e
 
             if response.status_code in SETTINGS.app.proxy_retry_on_status and attempt < retries:

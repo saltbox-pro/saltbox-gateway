@@ -141,6 +141,20 @@ class ApiProxyRequestException(ProxyServiceException):
         super().__init__(self.detail)
 
 
+class ApiProxyRequestTimeoutException(ProxyServiceException):
+    """Exception raised when timeout processing the API proxy request."""
+
+    status_code = status.HTTP_504_GATEWAY_TIMEOUT
+    detail = 'When processing the API proxy request, the response time from the service has expired.'
+
+    def __init__(self, detail: str | None = None, status_code: int | None = None) -> None:
+        if status_code:
+            self.status_code = status_code
+        if detail:
+            self.detail = detail
+        super().__init__(self.detail)
+
+
 class ServiceHasNoInstancesException(ProxyServiceException):
     """Exception raised when a service has no instances available."""
 
