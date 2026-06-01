@@ -20,7 +20,7 @@ include:
     file: 'def-branch-merge-guard.yml'
 
 
-Build gateway image for tag:
+Build Gateway image for tag:
   stage: build
   extends: .build-image
   variables:
@@ -30,7 +30,7 @@ Build gateway image for tag:
     - if: '$CI_COMMIT_TAG'
 
 
-Build gateway image for branch:
+Build Gateway image for branch:
   stage: build
   extends: .build-image
   variables:
@@ -44,23 +44,26 @@ Build gateway image for branch:
   stage: test
   variables:
     PIP_CACHE_DIR: '$CI_PROJECT_DIR/.cache/pip'
+    APK_CACHE_DIR: '$CI_PROJECT_DIR/.cache/apk'
   image: python:3.12-alpine
   before_script:
-    - apk add git
+    - mkdir -p "$APK_CACHE_DIR"
+    - apk add --cache-dir "$APK_CACHE_DIR" git
     - pip3 install -e .[dev]
   cache:
     paths:
-      - '.cache/pip/'
+      - '$PIP_CACHE_DIR'
+      - '$APK_CACHE_DIR'
   rules:
     - if: $LINTING_ENABLED == 'true'
 
 
-ruff:
+Ruff:
   extends: .lint-job
-  script: ruff check saltbox_gateway # --select I --fix
+  script: ruff check saltbox_gateway  # --select I --fix
 
 
-mypy:
+Mypy:
   extends: .lint-job
   script: mypy saltbox_gateway
 
@@ -72,7 +75,7 @@ Trigger API Client build:
     MODULE_NAME: saltbox_gateway
     GEN_OPENAPI_CMD: python3 "./${MODULE_NAME}/utils/generate_openapi.py"
   trigger:
-    include: 
+    include:
       - project: 'saltbox/ci-lib'
         file: 'gen-api-client.yml'
     strategy: mirror
