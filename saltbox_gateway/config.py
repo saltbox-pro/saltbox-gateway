@@ -41,6 +41,7 @@ class AppSettings(BaseSettings):
     proxy_retry_backoff_base: float = 0.1  # seconds, exponential backoff
     proxy_retry_on_status: list[int] = Field(default_factory=lambda: [502, 503, 504])
     proxy_retry_idempotent_methods: list[str] = Field(default_factory=lambda: ['GET', 'HEAD', 'OPTIONS'])
+    rabbit_mq_reconnect_interval: float = 5.0  # TODO (a.karmanov): SBX-170 Decide to move to SDK rabbit_config
     health_check_interval: int = 15
     health_check_timeout: int = 3
 
@@ -55,7 +56,12 @@ class Settings(BaseSettings):
 
 SETTINGS = Settings()
 
-broker = RabbitBroker(url=SETTINGS.rabbitmq.url)
+# TODO (a.karmanov): SBX-170 Decide to init in SDK
+broker = RabbitBroker(
+    url=SETTINGS.rabbitmq.url,
+    fail_fast=False,  # Keep trying to connect
+    reconnect_interval=SETTINGS.app.rabbit_mq_reconnect_interval,
+)
 
 
 def get_broker() -> RabbitBroker:
