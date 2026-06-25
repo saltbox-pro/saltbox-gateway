@@ -85,10 +85,7 @@ app.add_middleware(
     + [r'/static/(.*)']
     + [r'/metrics']
     + [r'/api/discovery(?:/.*)?$']
-    + [r'/api/core/system/[\w-]+/authorized_keys']
-    + [r'/api/core/task-tpl-sources(?:/.*)?$']
-    + [r'/api/core/task-tpls(?:/.*)?$']
-    + [r'/api/core/bg-task-result(?:/.*)?$'],
+    + [r'/api/core/system/[\w-]+/authorized_keys'],
 )
 
 app.add_middleware(
