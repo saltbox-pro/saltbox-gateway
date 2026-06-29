@@ -13,6 +13,7 @@ from saltbox_sdk.db.redis.config import get_redis
 from saltbox_sdk.discovery_client.schemas import (
     DiscoveryResponse,
     ProxyBalancingStrategy,
+    ServiceFrontendConfig,
     ServiceSchema,
 )
 
@@ -38,6 +39,16 @@ async def get_full_config(
     """Get full configuration for the frontend."""
     config = await discovery_service.get_config()
     return config
+
+
+@router.post('/add-standalone-front')
+async def add_standalone_front(
+    data: ServiceFrontendConfig,
+    discovery_service: Annotated[DiscoveryService, Depends(get_discovery_service)],
+) -> dict:
+    """Get full configuration for the frontend."""
+    result = await discovery_service.add_standalone_front(data)
+    return result
 
 
 @router.post('/register')

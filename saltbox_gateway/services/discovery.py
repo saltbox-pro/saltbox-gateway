@@ -4,6 +4,7 @@ from fastapi import Depends
 from redis.asyncio import Redis
 
 from saltbox_gateway.config import SETTINGS, logger
+from saltbox_gateway.dao.front_dao import FrontDAO, get_front_dao
 from saltbox_gateway.dao.service_dao import ServiceDAO, get_service_dao
 from saltbox_gateway.exceptions import (
     NonOfficialServiceException,
@@ -20,6 +21,7 @@ from saltbox_gateway.utils.redis_locker import AsyncRedisLockerFactory
 from saltbox_sdk.config.keycloak_config import KC_SETTINGS
 from saltbox_sdk.discovery_client.schemas import (
     ProxyBalancingStrategy,
+    ServiceFrontendConfig,
     ServiceInstance,
     ServiceSchema,
 )
@@ -28,8 +30,9 @@ from saltbox_sdk.discovery_client.schemas import (
 class DiscoveryService:
     """Service for managing discovery operations."""
 
-    def __init__(self, dao: ServiceDAO, locker: AsyncRedisLockerFactory) -> None:
+    def __init__(self, dao: ServiceDAO, front_dao: FrontDAO, locker: AsyncRedisLockerFactory) -> None:
         self._dao = dao
+        self._front_dao = front_dao
         self._locker = locker
 
     def _to_service_schema(self, service_data: dict) -> ServiceSchema:
@@ -127,6 +130,8 @@ class DiscoveryService:
 
     async def get_config(self) -> DiscoveryServiceConfig:
         services = await self.get_all_services()
+        fronts_list = await self._front_dao.list()
+        standalone_fronts = [ServiceFrontendConfig.model_validate(front_config) for front_config in fronts_list]
 
         config = DiscoveryServiceConfig(
             auth_config=KeycloakConfig(
@@ -135,15 +140,19 @@ class DiscoveryService:
                 redirect_uri=f'{SETTINGS.app.server_scheme}://{SETTINGS.app.server_outer_socket}',
                 client_secret=KC_SETTINGS.client_secret,
             ),
-            services=[service.front_config for service in services if service.enabled],
+            services=[service.front_config for service in services if service.enabled] + standalone_fronts,
         )
 
         return config
 
+    async def add_standalone_front(self, data: ServiceFrontendConfig) -> dict:
+        return await self._front_dao.create(data.model_dump())
+
 
 def get_discovery_service(
     dao: Annotated[ServiceDAO, Depends(get_service_dao)],
+    front_dao: Annotated[FrontDAO, Depends(get_front_dao)],
     redis_client: Annotated[Redis, Depends(get_redis)],
 ) -> DiscoveryService:
     locker_factory = AsyncRedisLockerFactory(redis_client=redis_client)
-    return DiscoveryService(dao, locker_factory)
+    return DiscoveryService(dao, front_dao, locker_factory)
