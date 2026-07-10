@@ -7,9 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [x.x.x] - YYYY-MM-DD
 
+### Added
+
+### Changed
+
 ### Fixed
 
-- Wait for RabbitMQ on disconnection (SBX-170)
+## [0.3.0] - 2026-07-10
+
+### Added
+
+- Added standalone frontend configuration support in discovery, including a dedicated endpoint to register standalone front entries.
+
+### Changed
+
+- Updated discovery configuration assembly to include standalone frontend entries alongside enabled service front configurations.
+- Restricted unauthenticated access by removing task template routes from the auth whitelist.
+
+### Fixed
+
+- Returned `504 Gateway Timeout` when upstream proxy requests timed out.
+- Made RabbitMQ broker connection retry on startup/disconnection using a configurable reconnect interval.
 
 ## [0.2.1] - 2026-05-21
 
