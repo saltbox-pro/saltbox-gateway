@@ -314,6 +314,8 @@ class TaskModel(
 
 class TaskMinionStatus(StrEnum):
     pending = 'pending'
+    blocked = 'blocked'
+    unreachable = 'unreachable'
     busy = 'busy'
     in_work = 'in_work'
     success = 'success'
