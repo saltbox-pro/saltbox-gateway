@@ -109,8 +109,8 @@ class JID:
 
 
 def fill_salt_kwarg_from_arg(
-    arg: None | list[Any], kwarg: None | dict[str, Any]
-) -> tuple[None | list[Any], None | dict[str, Any]]:
+    arg: list[Any] | None, kwarg: dict[str, Any] | None
+) -> tuple[list[Any] | None, dict[str, Any] | None]:
     """
     Extract kwarg dicts from args for SaltStack messages
 
