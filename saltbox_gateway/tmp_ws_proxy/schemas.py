@@ -7,7 +7,7 @@ from pydantic import AfterValidator, BaseModel, Field, JsonValue, PlainSerialize
 from saltbox_gateway.tmp_ws_proxy.errors import JidError
 from saltbox_gateway.tmp_ws_proxy.utils import JID
 from saltbox_sdk.db.mongo.schemas_base import PyObjectId
-from saltbox_sdk.db.schemas_base import SYSTEM_SHORT_USER, CreatedModifiedMixin, Source, UserShort
+from saltbox_sdk.db.schemas_base import SYSTEM_SHORT_USER, CreatedModifiedMixin, Source, SourceMixin, UserShort
 from saltbox_sdk.utilities.helpers import Iso8601ZDatetime as TimezoneAwareDatetime
 from saltbox_sdk.utilities.helpers import format_iso8601_z, make_aware, utc_now
 
@@ -200,11 +200,8 @@ class TaskTemplateDefaultsSchema(BaseModel):
 
 
 class TaskTemplateShort(IDMixin):
-    id: PyObjectId = Field(title='ID', serialization_alias='id')
-    title: str = Field(title='Template title')
+    title: str | dict[str, str] = Field(title='Template title')
     name: str = Field(title='Template name')
-    repo_id: PyObjectId | None = Field(title='Repository id', default=None)
-    commit_hash: str | None = Field(title='Repository commit hash', default=None)
     defaults: TaskTemplateDefaultsSchema | None = Field(title='Default values', default=None)
 
 
@@ -218,7 +215,7 @@ class TaskStatusShort(CreatedModifiedMixin):
     data: dict = Field(title='Status data', default_factory=dict)
 
 
-class TaskReadOnlyFieldsMixin(BaseModel):
+class TaskReadOnlyFieldsMixin(SourceMixin):
     task_type: TaskType = Field(title='Task type')
 
     target_collection_id: PyObjectId = Field(title='Target ID')
@@ -231,10 +228,25 @@ class TaskReadOnlyFieldsMixin(BaseModel):
     kwarg: dict[str, Any] | None = Field(title='Kwarg', default=None)
 
     user: UserShort
-    source: Source | None = Field(title='Source', default=None)
+
+
+class TaskRequirementResultType(StrEnum):
+    only_success = 'only_success'
+    only_failed = 'only_failed'
+    any = 'any'
+
+
+class TaskRequirement(BaseModel):
+    task_id: PyObjectId = Field(title='Task ID')
+    result_type: TaskRequirementResultType = Field(title='Task result type')
 
 
 class TaskEditableFieldsMixin(BaseModel):
+    description: str = Field(title='Description', default='')
+
+    weight: int = Field(title='Weight', default=1000)
+    requirements: list[TaskRequirement] = Field(title='Requirements', default_factory=list)
+
     batch_size: int = Field(title='Batch size', ge=0, default=TASKS_DEFAULTS_BATCH_SIZE)
     max_jobs_count_at_same_time: int = Field(
         title='Max jobs count at some time', ge=1, default=TASKS_DEFAULTS_MAX_JOBS_COUNT_AT_SAME_TIME
