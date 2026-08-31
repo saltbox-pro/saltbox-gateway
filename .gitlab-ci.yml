@@ -17,10 +17,15 @@ variables:
 include:
   - project: 'saltbox/ci-lib'
     file: 'build-image.yml'
+
   - project: 'saltbox/ci-lib'
     file: 'def-branch-merge-guard.yml'
+
   - project: 'saltbox/ci-lib'
     file: 'set-version.yml'
+
+  - project: 'saltbox/ci-lib'
+    file: 'mirror-repo.yml'
 
 
 .lint-job:
@@ -78,3 +83,8 @@ Trigger API Client build:
     strategy: mirror
   rules:
     - if: $CI_PIPELINE_SOURCE == 'push'
+
+
+Mirror Repository:
+  extends: .mirror-repo
+  stage: build
