@@ -67,6 +67,7 @@ class JobReadOnlyFieldsMixin(BaseModel):
     fun: str
     arg: list | None = None
     kwarg: dict | None = None
+    template_id: PyObjectId | None = None
 
     ttl: int = Field(ge=1, le=JOBS_MAX_TTL, default=JOBS_DEFAULT_TTL)
 
