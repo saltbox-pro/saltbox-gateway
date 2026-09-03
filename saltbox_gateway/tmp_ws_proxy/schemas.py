@@ -99,6 +99,7 @@ class JobMinionsCountAggregation(BaseModel):
 class JobAggregateFieldsMixin(BaseModel):
     minions_count: JobMinionsCountAggregation = Field()
     waiting_expires_at_dt: datetime
+    template_source_id: PyObjectId | None = None
 
 
 class JobModel(
