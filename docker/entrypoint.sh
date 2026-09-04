@@ -16,6 +16,8 @@ KEYCLOAK_CLIENT_SECRET="$(cat "$KEYCLOAK_CLIENT_SECRET_FILE")"
 export REDIS_PASSWORD KEYCLOAK_CLIENT_SECRET
 
 if [ "$DEV_MODE" = 1 ]; then
+    # typing_extensions is installed via apt (no RECORD file), pip can't upgrade it in place
+    pip3 install --ignore-installed typing_extensions
     pip3 install --editable .[reload]
     pip3 install --editable "${SALTBOX_SDK_SRC_PATH}[mongo]"
 fi
