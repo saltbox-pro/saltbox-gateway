@@ -6,8 +6,7 @@ from redis.asyncio import Redis
 from saltbox_gateway.exceptions import SecureWebSocketPolicyException
 from saltbox_gateway.services.discovery import DiscoveryService, get_discovery_service
 from saltbox_gateway.tmp_ws_proxy.dao import JobDao, TaskDao
-from saltbox_gateway.tmp_ws_proxy.schemas import IntJid, JobModel, JobReturnNotifySchema, TaskMinionModel, TaskModel
-from saltbox_gateway.tmp_ws_proxy.utils import JID
+from saltbox_gateway.tmp_ws_proxy.schemas import JobModel, JobReturnNotifySchema, TaskMinionModel, TaskModel
 from saltbox_gateway.utils.opa_client import get_opa_client
 from saltbox_gateway.utils.secure_websocket import PubSubAuthenticatedWebSocket, PubSubMessageHandler
 from saltbox_sdk.db.redis.config import get_redis
@@ -30,52 +29,50 @@ async def jobs_rets_websocket(
     )
 
 
-@ws_core_jobs_router.websocket('/{jid}/info')
+@ws_core_jobs_router.websocket('/{job_id}/info')
 async def job_info_endpoint_websocket(
-    jid: IntJid,
+    job_id: str,
     websocket: WebSocket,
     rdb: Annotated[Redis, Depends(get_redis)],
     discovery: Annotated[DiscoveryService, Depends(get_discovery_service)],
 ) -> None:
-    _jid = JID(jid)
     job_service = JobDao(discovery)
-    job = job_service.get_job(_jid)
+    job = await job_service.get_job(job_id=job_id)
 
     if not job:
-        msg = f'Job not found by JID={jid}'
+        msg = f'Job not found by mongo ID={job_id}'
         raise SecureWebSocketPolicyException(msg)
 
     secure_websocket = PubSubAuthenticatedWebSocket(websocket, rdb)
     await secure_websocket.handle_pubsub(
         handlers=[
-            PubSubMessageHandler(f'job:{jid}:create', 'job', schema=JobModel),
-            PubSubMessageHandler(f'job:{jid}:update', 'job', schema=JobModel),
-            PubSubMessageHandler(f'job-return:{jid}:create', 'job-return', schema=JobReturnNotifySchema),
-            PubSubMessageHandler(f'job-return:{jid}:update', 'job-return', schema=JobReturnNotifySchema),
+            PubSubMessageHandler(f'job:{job_id}:create', 'job', schema=JobModel),
+            PubSubMessageHandler(f'job:{job_id}:update', 'job', schema=JobModel),
+            PubSubMessageHandler(f'job-return:{job_id}:create', 'job-return', schema=JobReturnNotifySchema),
+            PubSubMessageHandler(f'job-return:{job_id}:update', 'job-return', schema=JobReturnNotifySchema),
         ]
     )
 
 
-@ws_core_jobs_router.websocket('/{jid}/return')
+@ws_core_jobs_router.websocket('/{job_id}/return')
 async def jobs_endpoint_websocket(
-    jid: IntJid,
+    job_id: str,
     websocket: WebSocket,
     rdb: Annotated[Redis, Depends(get_redis)],
     discovery: Annotated[DiscoveryService, Depends(get_discovery_service)],
 ) -> None:
-    _jid = JID(jid)
     job_service = JobDao(discovery)
-    job = job_service.get_job(_jid)
+    job = await job_service.get_job(job_id=job_id)
 
     if not job:
-        msg = f'Job not found by JID={jid}'
+        msg = f'Job not found by mongo ID={job_id}'
         raise SecureWebSocketPolicyException(msg)
 
     secure_websocket = PubSubAuthenticatedWebSocket(websocket, rdb)
     await secure_websocket.handle_pubsub(
         handlers=[
-            PubSubMessageHandler(f'job-return:{jid}:create', 'job-return', schema=JobReturnNotifySchema),
-            PubSubMessageHandler(f'job-return:{jid}:update', 'job-return', schema=JobReturnNotifySchema),
+            PubSubMessageHandler(f'job-return:{job_id}:create', 'job-return', schema=JobReturnNotifySchema),
+            PubSubMessageHandler(f'job-return:{job_id}:update', 'job-return', schema=JobReturnNotifySchema),
         ]
     )
 
@@ -94,28 +91,28 @@ async def tasks_websocket(
     )
 
 
-@ws_core_tasks_router.websocket('/{tid}')
+@ws_core_tasks_router.websocket('/{task_id}')
 async def task_websocket(
-    tid: str,
+    task_id: str,
     websocket: WebSocket,
     rdb: Annotated[Redis, Depends(get_redis)],
     discovery: Annotated[DiscoveryService, Depends(get_discovery_service)],
 ) -> None:
     task_service = TaskDao(discovery)
-    task = await task_service.get_task(tid=tid)
+    task = await task_service.get_task(task_id=task_id)
 
     if not task:
-        msg = f'Task not found by ID={tid}'
+        msg = f'Task not found by mongo ID={task_id}'
         raise SecureWebSocketPolicyException(msg)
 
     secure_websocket = PubSubAuthenticatedWebSocket(websocket, rdb)
     await secure_websocket.handle_pubsub(
         handlers=[
-            PubSubMessageHandler(f'task:{tid}:job-return:*:create', 'job-return', schema=JobReturnNotifySchema),
-            PubSubMessageHandler(f'task:{tid}:job-return:*:update', 'job-return', schema=JobReturnNotifySchema),
-            PubSubMessageHandler(f'task:{tid}:task-minion:*:create', 'task-minion', schema=TaskMinionModel),
-            PubSubMessageHandler(f'task:{tid}:task-minion:*:update', 'task-minion', schema=TaskMinionModel),
-            PubSubMessageHandler(f'task:{tid}:update', 'task', schema=TaskModel),
+            PubSubMessageHandler(f'task:{task_id}:job-return:*:create', 'job-return', schema=JobReturnNotifySchema),
+            PubSubMessageHandler(f'task:{task_id}:job-return:*:update', 'job-return', schema=JobReturnNotifySchema),
+            PubSubMessageHandler(f'task:{task_id}:task-minion:*:create', 'task-minion', schema=TaskMinionModel),
+            PubSubMessageHandler(f'task:{task_id}:task-minion:*:update', 'task-minion', schema=TaskMinionModel),
+            PubSubMessageHandler(f'task:{task_id}:update', 'task', schema=TaskModel),
         ]
     )
 
