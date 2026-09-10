@@ -133,6 +133,7 @@ class JobReturnStatus(StrEnum):
 class JobReturnReadOnlyFieldsMixin(BaseModel):
     minion_id: str
     salt_master: str
+    job_id: PyObjectId
     jid: StrJid
     fun: str
     user: UserShort | None = Field(default=SYSTEM_SHORT_USER)
