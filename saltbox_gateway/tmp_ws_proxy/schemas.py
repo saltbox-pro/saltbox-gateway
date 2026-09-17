@@ -16,7 +16,7 @@ JOBS_DEFAULT_TTL = 60 * 60 * 24 * 7
 
 TASKS_DEFAULTS_BATCH_SIZE = 0
 TASKS_DEFAULTS_MAX_JOBS_COUNT_AT_SAME_TIME = 1
-TASKS_DEFAULTS_MAX_RETRIES = 0
+TASKS_DEFAULTS_MAX_RETRIES = 1
 TASKS_DEFAULTS_RETRY_DELAY = 10
 
 
@@ -69,8 +69,6 @@ class JobReadOnlyFieldsMixin(BaseModel):
     kwarg: dict | None = None
     template_id: PyObjectId | None = None
 
-    ttl: int = Field(ge=1, le=JOBS_MAX_TTL, default=JOBS_DEFAULT_TTL)
-
     user: UserShort | None = Field(default=SYSTEM_SHORT_USER)
     source: Source | None = None
 
@@ -82,6 +80,7 @@ class JobEditableFieldsMixin(BaseModel):
     stamp: TimezoneAwareDatetime | None = Field(default=None)
     status: JobStatus = Field(default=JobStatus.starting)
     launch_error_type: str | None = None
+    ttl: int = Field(ge=1, le=JOBS_MAX_TTL, default=JOBS_DEFAULT_TTL)
 
 
 class JobComputedFieldsMixin(BaseModel): ...
@@ -142,6 +141,7 @@ class JobReturnReadOnlyFieldsMixin(BaseModel):
 
 class JobReturnEditableFieldsMixin(BaseModel):
     status: JobReturnStatus = Field(default=JobReturnStatus.waiting)
+    ttl: int | None = Field(ge=0, le=JOBS_MAX_TTL, default=None)
     retcode: int | None = None
     fun_args: list | None = None
     fun_kwarg: dict | None = None
