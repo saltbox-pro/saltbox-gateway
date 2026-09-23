@@ -7,7 +7,7 @@ from pydantic import AfterValidator, BaseModel, Field, JsonValue, PlainSerialize
 from saltbox_gateway.tmp_ws_proxy.errors import JidError
 from saltbox_gateway.tmp_ws_proxy.utils import JID
 from saltbox_sdk.db.mongo.schemas_base import PyObjectId
-from saltbox_sdk.db.schemas_base import SYSTEM_SHORT_USER, CreatedModifiedMixin, Source, SourceMixin, UserShort
+from saltbox_sdk.db.schemas_base import SYSTEM_SHORT_USER, CreatedModifiedMixin, SourceMixin, UserShort
 from saltbox_sdk.utilities.helpers import Iso8601ZDatetime as TimezoneAwareDatetime
 from saltbox_sdk.utilities.helpers import format_iso8601_z, make_aware, utc_now
 
@@ -60,7 +60,7 @@ class JobStatus(StrEnum):
     launch_error = 'launch_error'
 
 
-class JobReadOnlyFieldsMixin(BaseModel):
+class JobReadOnlyFieldsMixin(SourceMixin):
     tgt: str | list[str]
     tgt_type: SaltTgtType
     salt_master: str
@@ -70,7 +70,6 @@ class JobReadOnlyFieldsMixin(BaseModel):
     template_id: PyObjectId | None = None
 
     user: UserShort | None = Field(default=SYSTEM_SHORT_USER)
-    source: Source | None = None
 
 
 class JobEditableFieldsMixin(BaseModel):
@@ -129,14 +128,13 @@ class JobReturnStatus(StrEnum):
     ignored = 'ignored'
 
 
-class JobReturnReadOnlyFieldsMixin(BaseModel):
+class JobReturnReadOnlyFieldsMixin(SourceMixin):
     minion_id: str
     salt_master: str
     job_id: PyObjectId
     jid: StrJid
     fun: str
     user: UserShort | None = Field(default=SYSTEM_SHORT_USER)
-    source: Source | None = None
 
 
 class JobReturnEditableFieldsMixin(BaseModel):
@@ -257,7 +255,8 @@ class TaskEditableFieldsMixin(BaseModel):
 
     max_retries: int = Field(title='Max retries', ge=0, default=TASKS_DEFAULTS_MAX_RETRIES)
     retry_delay: int = Field(title='Retry delay', description='in seconds', ge=0, default=TASKS_DEFAULTS_RETRY_DELAY)
-    ttl: int | None = Field(ge=0, le=JOBS_MAX_TTL, default=None)
+    ttl_jobs: int | None = Field(title='TTL of jobs created by this task', ge=0, le=JOBS_MAX_TTL, default=None)
+    ttl_task: int | None = Field(title='TTL of the task itself', ge=0, default=None)
 
     last_sync_dt: TimezoneAwareDatetime | None = Field(title='Last sync datetime', default=None)
 
@@ -274,6 +273,15 @@ class TaskStatusJoinedFieldsMixin(BaseModel):
     status: TaskStatusShort = Field(
         title='Status', default=TaskStatusShort(type=TaskStatus.created, created=utc_now(), modified=utc_now())
     )
+
+
+class TaskStatusDataJoinedFieldsMixin(BaseModel):
+    status_data: dict = Field(title='Status data', default_factory=dict)
+    status_dt: TimezoneAwareDatetime | None = Field(title='Status datetime', default=None)
+
+
+class TaskLastStartedJoinedFieldsMixin(BaseModel):
+    last_started_dt: TimezoneAwareDatetime | None = Field(title='Last started datetime', default=None)
 
 
 class TaskJobJoinedFieldsMixin[TaskJobJoinedSchema: BaseModel](BaseModel):
@@ -304,6 +312,8 @@ class TaskModel(
     TaskTemplateJoinedFieldsMixin,
     TaskTargetCollectionJoinedFieldsMixin,
     TaskStatusJoinedFieldsMixin,
+    TaskStatusDataJoinedFieldsMixin,
+    TaskLastStartedJoinedFieldsMixin,
     TaskAggregatedFieldsMixin,
     TaskEditableFieldsMixin,
     TaskReadOnlyFieldsMixin,
