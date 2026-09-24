@@ -2,7 +2,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Response
 
-from saltbox_gateway.services.proxy import ProxyService, get_proxy_service
+from saltbox_gateway.services.proxy import ProxyService, build_client_response, get_proxy_service
 
 router = APIRouter(prefix='/static', tags=['Static Proxy'])
 
@@ -18,9 +18,4 @@ async def proxy_request(
         path=path,
     )
 
-    return Response(
-        content=response.content,
-        status_code=response.status_code,
-        headers=dict(response.headers),
-        media_type=response.headers.get('content-type'),
-    )
+    return build_client_response(response)

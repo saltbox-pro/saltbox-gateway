@@ -3,7 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Body, Depends, Query, Response
 
 from saltbox_gateway.config import logger
-from saltbox_gateway.services.proxy import ProxyService, get_proxy_service
+from saltbox_gateway.services.proxy import ProxyService, build_client_response, get_proxy_service
 from saltbox_gateway.utils.opa_client import AsyncOpaClient, get_opa_client
 from saltbox_sdk.discovery_client.schemas import OPAQueryFilterFormat
 
@@ -21,12 +21,7 @@ async def proxy_request(
         path=path,
     )
 
-    return Response(
-        content=response.content,
-        status_code=response.status_code,
-        headers=dict(response.headers),
-        media_type=response.headers.get('content-type'),
-    )
+    return build_client_response(response)
 
 
 # Api route for devs

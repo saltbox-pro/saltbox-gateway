@@ -4,12 +4,13 @@ import json
 import re
 import time
 from collections import defaultdict
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
 from typing import Annotated
 from urllib.parse import quote
 
 import httpx
-from fastapi import Depends, Request, UploadFile
+from fastapi import Depends, Request, Response, UploadFile
+from fastapi.responses import StreamingResponse
 from faststream.rabbit import RabbitBroker
 from redis.asyncio import Redis
 
@@ -42,6 +43,44 @@ from saltbox_sdk.event_bus.schemas import (
     AuditSubjectType,
 )
 from saltbox_sdk.fastapi_utils.middlewares import get_audit_ctx
+
+HOP_BY_HOP_HEADERS = {
+    'connection',
+    'keep-alive',
+    'proxy-authenticate',
+    'proxy-authorization',
+    'te',
+    'trailers',
+    'transfer-encoding',
+    'upgrade',
+}
+
+
+def _filter_headers(headers: httpx.Headers, excluded: set[str]) -> dict[str, str]:
+    return {key: value for key, value in headers.items() if key.lower() not in excluded}
+
+
+async def _iter_raw_and_close(response: httpx.Response) -> AsyncIterator[bytes]:
+    try:
+        async for chunk in response.aiter_raw():
+            yield chunk
+    finally:
+        await response.aclose()
+
+
+def build_client_response(response: httpx.Response) -> Response:
+    if response.is_stream_consumed:
+        return Response(
+            content=response.content,
+            status_code=response.status_code,
+            headers=_filter_headers(response.headers, HOP_BY_HOP_HEADERS | {'content-length', 'content-encoding'}),
+        )
+
+    return StreamingResponse(
+        _iter_raw_and_close(response),
+        status_code=response.status_code,
+        headers=_filter_headers(response.headers, HOP_BY_HOP_HEADERS),
+    )
 
 
 class ProxyService:
@@ -188,8 +227,10 @@ class ProxyService:
             opa_config=endpoint.opa_config,
         )
 
-        if endpoint.cache_ttl > 0 and self._is_response_cachable(service_response):
-            await self._add_response_to_cache(service_response, endpoint.cache_ttl)
+        if endpoint.cache_ttl > 0:
+            await service_response.aread()
+            if self._is_response_cachable(service_response):
+                await self._add_response_to_cache(service_response, endpoint.cache_ttl)
 
         if self._server_timing:
             # TODO: refactor to use Server-Timing consistently across the app
@@ -345,20 +386,8 @@ class ProxyService:
                 except Exception as e:
                     logger.warning(f'Error parsing cached response: {e}')
                     return None
-            # Фильтруем hop-by-hop заголовки и сбрасываем content-length
-            hop_by_hop = {
-                'connection',
-                'keep-alive',
-                'proxy-authenticate',
-                'proxy-authorization',
-                'te',
-                'trailers',
-                'transfer-encoding',
-                'upgrade',
-                'content-length',
-            }
             raw_headers = (cached_response.get('headers') or {}) if isinstance(cached_response, dict) else {}
-            headers = {k: v for k, v in raw_headers.items() if k.lower() not in hop_by_hop}
+            headers = {k: v for k, v in raw_headers.items() if k.lower() not in HOP_BY_HOP_HEADERS | {'content-length'}}
 
             content_b64 = (cached_response or {}).get('content')
             try:
@@ -408,15 +437,15 @@ class ProxyService:
         )
         backoff = SETTINGS.app.proxy_retry_backoff_base
         for attempt in range(retries + 1):
+            request = self._httpx_client.build_request(
+                self._request_data.method,
+                url,
+                headers=headers,
+                params=self._request_data.query_params,
+                content=self._request_data.raw_body,
+            )
             try:
-                response = await self._httpx_client.request(
-                    self._request_data.method,
-                    url,
-                    headers=headers,
-                    params=self._request_data.query_params,
-                    content=self._request_data.raw_body,
-                    follow_redirects=True,
-                )
+                response = await self._httpx_client.send(request, stream=True, follow_redirects=True)
             except Exception as e:
                 if attempt < retries:
                     await asyncio.sleep(backoff)
@@ -429,6 +458,7 @@ class ProxyService:
                 raise ApiProxyRequestException(detail=str(e)) from e
 
             if response.status_code in SETTINGS.app.proxy_retry_on_status and attempt < retries:
+                await response.aclose()
                 await asyncio.sleep(backoff)
                 backoff *= 2
                 continue
@@ -438,6 +468,7 @@ class ProxyService:
         self._server_timing['service'] = round((service_response_timer_end - service_response_timer_start) * 1000, 2)
 
         if not response.is_success:
+            await response.aread()
             detail = 'Unknown error occurred while processing the request.'
             if response.content and response.headers.get('content-type', '').startswith('application/json'):
                 try:
