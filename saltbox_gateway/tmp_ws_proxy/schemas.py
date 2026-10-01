@@ -146,6 +146,7 @@ class JobReturnEditableFieldsMixin(BaseModel):
     system_user: str | None = None
     stamp: TimezoneAwareDatetime | None = None
     stamp_job: TimezoneAwareDatetime | None = Field(default=None)
+    duration_ms: int | None = None
 
 
 class JobReturnAggregatedFieldsMixin(BaseModel):
