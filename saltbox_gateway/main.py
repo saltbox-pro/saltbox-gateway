@@ -13,6 +13,7 @@ from saltbox_gateway.routers.discovery_router import router as discovery_router
 from saltbox_gateway.routers.permissions_router import router as permissions_router
 from saltbox_gateway.routers.proxy_router import router as proxy_router
 from saltbox_gateway.routers.static_proxy_router import router as static_proxy_router
+from saltbox_gateway.routers.user_settings_router import router as settings_router
 from saltbox_gateway.services.health_checker import get_health_checker_service
 from saltbox_gateway.tmp_ws_proxy.router import ws_core_jobs_router, ws_core_tasks_router
 from saltbox_gateway.utils.redis_cache import CustomRedisCache
@@ -98,10 +99,12 @@ app.add_middleware(
 
 app.add_middleware(ServerTimingMiddleware, service='fullproxy')
 
+
 PrometheusExporter(app).expose_metrics()
 app.add_exception_handler(SaltBoxBaseException, custom_http_handler)
 
 
+app.include_router(settings_router)
 app.include_router(permissions_router)
 app.include_router(discovery_router)
 app.include_router(proxy_router, include_in_schema=False)

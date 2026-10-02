@@ -399,3 +399,10 @@ class SecureWebSocketServerException(SecureWebSocketException):
 
     status_code = status.WS_1011_INTERNAL_ERROR
     detail: str = 'Internal server error in secure WebSocket connection.'
+
+
+# User Settings Errors
+class UserSettingsDAOException(GatewayException):
+    """Base exception for UserSettingsDAO errors."""
+
+    detail: str = 'An error occurred while accessing the user settings data store.'
