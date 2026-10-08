@@ -23,6 +23,7 @@ from saltbox_sdk.fastapi_utils.custom_openapi import custom_openapi, patch_swagg
 from saltbox_sdk.fastapi_utils.exception_handlers import custom_http_handler
 from saltbox_sdk.fastapi_utils.middlewares import AuditContextMiddleware, ServerTimingMiddleware
 from saltbox_sdk.fastapi_utils.promethes_metrics.exporter import PrometheusExporter
+from saltbox_sdk.utilities.audit import AuditEventPublisher
 
 
 @asynccontextmanager
@@ -35,6 +36,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator:
         health_task = asyncio.create_task(health_checker.start())
     else:
         logger.warning('Health checker service is not available')
+    audit_publisher = AuditEventPublisher(broker=broker, max_concurrent=100)
+    await audit_publisher.start()
+    app.state.audit_publisher = audit_publisher
+
     yield
 
     if health_task:
@@ -44,6 +49,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator:
             await health_task
         except asyncio.CancelledError:
             pass
+    await audit_publisher.stop()
     await broker.stop()
     # Clean up redis cache
     await CustomRedisCache.clear_cache(get_redis_connection())
