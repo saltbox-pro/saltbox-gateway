@@ -9,9 +9,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- User settings management (DAO, service and router) implemented in the Gateway.
+- Stream proxying support for API and static proxy responses, so large or
+  streaming upstream responses are no longer fully buffered.
+- `template_source_id` and `template_id` fields on job schemas.
+- `job_id` field on job return schema.
+- Client Toolkit allowed as an official discovery module.
+
 ### Changed
 
+- `ProxyService` now publishes data-access audit events via the shared
+  `AuditEventPublisher` from the SDK, replacing direct RabbitMQ broker usage.
+- WebSocket task and job schemas updated to match backend changes.
+- `saltbox-sdk` dependency pinned to a specific commit for improved stability.
+
 ### Fixed
+
+- Fixed getting a job by JID (mongo id vs JID).
+- Dev-mode entrypoint script: ensure `typing_extensions` installs correctly
+  in `DEV_MODE`.
 
 ## [0.3.0] - 2026-07-10
 
