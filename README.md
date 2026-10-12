@@ -1,126 +1,177 @@
+<div align = right>
+
+&ensp;[<kbd> <br> EN <br> </kbd>](./README.md)&ensp;
+&ensp;[<kbd> <br> RU <br> </kbd>](./README_RU.md)&ensp;
+
+</div>
+
+---
+
 # Salt.Box Gateway
 
-## Описание
+## Table of Contents
 
-Salt.Box Gateway — это компонент платформы Salt.Box, реализующий API Gateway для микросервисной архитектуры. Он обеспечивает маршрутизацию запросов, балансировку нагрузки, health-check сервисов, кэширование, а также централизованное управление доступом на основе политик OPA и системы пермишенов.
+- **[About](#about)**
+- **[Key capabilities](#key-capabilities)**
+- **[Quick Start](#quick-start)**
+  - [Running](#1-running)
+  - [Environment variables](#2-environment-variables)
+  - [Main endpoints](#3-main-endpoints)
+- **[Architecture](#architecture)**
+- **[Managing services](#managing-services)**
+  - [Registering a service in Discovery](#registering-a-service-in-discovery)
+- **[Load balancing](#load-balancing)**
+- **[Caching](#caching)**
+- **[Static file proxying](#static-file-proxying)**
+- **[Audit](#audit)**
+- **[Authorization and access control](#authorization-and-access-control)**
+  - [Advantages of this approach](#advantages-of-this-approach)
+  - [OPA, Open Policy Agent](#1-opa-open-policy-agent)
+  - [Permissions](#2-permissions)
+  - [Partial Query](#3-partial-query)
+- **[Updating OPA policies](#updating-opa-policies)**
 
-Gateway работает поверх FastAPI, интегрируется с Redis для хранения состояния и кэша, а также с OPA (Open Policy Agent) для проверки разрешений.
+
+## About
+
+**Salt.Box Gateway** is a component of the Salt.Box platform that implements the API Gateway for its microservice architecture. It handles request routing, load balancing, service health checks, caching, and centralized access control based on OPA policies and the permission system.
+
+Gateway runs on top of FastAPI, integrates with Redis for state and cache storage, and with OPA, Open Policy Agent, for permission checks.
 
 ---
 
-## Основные возможности
+## Key capabilities
 
-- **Динамическое обнаружение сервисов** (Service Discovery)
-- **Балансировка нагрузки** (Round Robin, Weighted RR, Random)
-- **Health-check инстансов**
-- **Кэширование ответов**
-- **Проксирование статических файлов**
-- **Управление доступом через OPA и пермишены**
-- **API для управления сервисами и инстансами**
-- **Swagger/OpenAPI документация для сервисов**
+- **Dynamic service discovery**
+- **Load balancing**
+- **Instance health checks**
+- **Response caching**
+- **Static file proxying**
+- **Access control through OPA and permissions**
+- **Audit event publishing for proxied requests**
+- **API for managing services, instances and user settings**
+- **Swagger/OpenAPI documentation for services**
 
 ---
 
-## Быстрый старт
+## Quick Start
 
-### 1. Запуск через Docker Compose
+### 1. Running
+
+Gateway runs as part of **Salt.Box Compose** and has no Docker Compose file of its own. From the `saltbox-compose` directory:
 
 ```bash
-docker-compose up saltbox-gateway
+sudo ./bin/sb-compose.sh up saltbox-gateway
 ```
 
-### 2. Переменные окружения
+### 2. Environment variables
 
-- `GATEWAY_PORT` — порт для запуска (по умолчанию 8000)
-- `REDIS_URL` — строка подключения к Redis
-- `OPA_URL` — адрес OPA сервера
-- `PROXY_REQUEST_TIMEOUT` — таймаут для проксируемых запросов
+- `GATEWAY_HTTP_PORT` – port to serve on, `8000` by default
+- `REDIS_URL` – Redis connection string
+- `OPA_URL` – OPA server address
+- `PROXY_REQUEST_TIMEOUT` – timeout for proxied requests
 
-### 3. Основные эндпоинты
+### 3. Main endpoints
 
-- `/api/discovery/services` — список зарегистрированных сервисов
-- `/api/discovery/services/{service}/toggle` — включение/отключение сервиса
-- `/api/discovery/services/{service}/change-strategy` — смена стратегии балансировки
-- `/api/discovery/unregister/{service}` — удаление сервиса
-- `/api/discovery/unregister/{service}/{instance_id}` — удаление инстанса
-- `/api/proxy/{service}/{path}` — проксирование запроса к сервису
-
----
-
-## Архитектура
-
-- **ServiceDAO** — слой доступа к данным о сервисах (Redis)
-- **ProxyService** — основной класс для проксирования запросов, балансировки, проверки доступа
-- **BalancingStrategy** — фабрика стратегий балансировки
-- **AsyncOpaClient** — клиент для проверки политик OPA
-- **CustomRedisCache** — кэширование ответов
+- `/api/discovery/health` – gateway liveness check
+- `/api/discovery/config` – current configuration of registered services
+- `/api/discovery/register` – register a service or its instance
+- `/api/discovery/add-standalone-front` – register a standalone frontend module
+- `/api/discovery/services` – list of registered services
+- `/api/discovery/services/{service_name}` – a single registered service
+- `/api/discovery/services/{service_name}/toggle` – enable or disable a service
+- `/api/discovery/services/{service_name}/change-strategy` – change the balancing strategy
+- `/api/discovery/unregister/{service_name}` – remove a service
+- `/api/discovery/unregister/{service_name}/{instance_id}` – remove an instance
+- `/api/{service_name}/{path}` – proxy a request to a service
+- `/static/{service_name}/{path}` – proxy a service's static files
+- `/api/permissions/{service_name}` – check the current user's permissions for a service
+- `/api/user-settings` – read and save the current user's personal settings
 
 ---
 
-## Управление сервисами
+## Architecture
 
-- Регистрация/отключение/удаление сервисов и инстансов через API
-- Автоматическое обновление состояния (health-check)
-- Поддержка нескольких инстансов одного сервиса
-
-### Регистрация сервиса в Discovery
-
-Для регистрации нового сервиса (например, core) используется механизм Service Discovery.
-Сервис при запуске отправляет информацию о себе (имя, endpoints, тип, стратегия балансировки, vendor и пр.) в gateway через API или напрямую в Redis.
-Пример регистрации можно найти в исходном коде core и saltbox-sdk (см. функцию регистрации в discovery_client).
-
-- Если сервис с таким именем ещё не зарегистрирован, он добавляется с одним инстансом.
-- Если сервис уже существует, то добавляется новый инстанс этого сервиса, либо обновляется текущий инстанс при совпадении id.
-- В SDK реализован клиент, который отправляет POST-запрос на `/api/discovery/register` с описанием сервиса и его инстанса.
-- При регистрации сервис передаёт gateway полный список своих ручек (endpoints) с их настройками: политикой доступа (OPA policy), параметрами кэширования (`cache_ttl`), partial-query, action и др.
-- После регистрации сервис появляется в списке доступных сервисов gateway и становится доступен для проксирования.
-- На основе зарегистрированных ручек gateway осуществляет проверку доступа (через OPA) и кэширование ответов согласно настройкам endpoint-а.
+- **ServiceDAO** – data access layer for services in Redis
+- **ProxyService** – the main class for request proxying, balancing and access checks
+- **BalancingStrategy** – factory of balancing strategies
+- **AsyncOpaClient** – client for checking OPA policies
+- **CustomRedisCache** – response caching
+- **AuditEventPublisher** – publishes audit events for proxied requests through the SDK
 
 ---
 
-## Балансировка нагрузки
+## Managing services
 
-Поддерживаются стратегии:
-- `rr` — Round Robin
-- `wrr` — Weighted Round Robin
-- `rand` — Random
+- Register, disable and remove services and instances through the API
+- State is kept up to date automatically through health checks
+- Multiple instances of the same service are supported
 
-Стратегия задаётся для каждого сервиса, можно менять через API.
+### Registering a service in Discovery
 
----
+A new service, core for example, registers itself through the Service Discovery mechanism.
+On startup a service sends the gateway, through the API or directly through Redis, information about itself: its name, endpoints, type, balancing strategy, vendor and other parameters.
+A registration example can be found in the core and saltbox-sdk source code, in the registration function of the discovery_client module.
 
-## Кэширование
-
-- Кэшируется только успешные (200 OK) ответы, если endpoint поддерживает TTL.
-- Кэш хранится в Redis, namespace: `gate_cache`.
-- Кэш отключается для Swagger/OpenAPI и приватных эндпоинтов.
-
----
-
-## Проксирование статических файлов
-
-- Для сервисов с настроенным `static_host` запросы к статическим файлам проксируются напрямую.
+- If a service with that name is not registered yet, it is added with a single instance.
+- If the service already exists, a new instance is added, or the current instance is updated if the id matches.
+- The SDK implements a client that sends a POST request to `/api/discovery/register` describing the service and its instance.
+- On registration the service passes the gateway its full list of endpoints with their settings: an OPA access policy, caching parameters `cache_ttl`, partial-query, action and others.
+- After registration the service appears in the gateway's list of available services and becomes available for proxying.
+- Based on the registered endpoints, the gateway checks access through OPA and caches responses according to each endpoint's settings.
+- The list of official modules allowed to register without extra checks includes core, processing, metric, scheduler, inventory, migration, audit and client-toolkit.
 
 ---
 
-## Авторизация и управление доступом
+## Load balancing
 
-Salt.Box Gateway реализует централизованную систему управления доступом на основе OPA (Open Policy Agent) и пермишенов, поддерживающую модель ABAC (Attribute-Based Access Control).
+Supported strategies:
+- `rr` – Round Robin
+- `wrr` – Weighted Round Robin
+- `rand` – Random
 
-### Преимущества решения
+The strategy is set per service and can be changed through the API.
 
-- **ABAC:** Доступ определяется на основе атрибутов пользователя, ресурса, действия и сервиса.
-- **Гибкость:** Политики сгруппированы по сервисам (например, core, scheduler), ресурсам (tasks, jobs, collections) и действиям (read, create, list и др.).
-- **Масштабируемость:** Легко добавлять новые сервисы, ресурсы, роли и условия.
-- **Partial Query:** OPA может возвращать фильтр для ограничения данных на уровне запроса.
+---
 
-### 1. OPA (Open Policy Agent)
+## Caching
 
-- Для каждого endpoint-а сервисов задаётся OPA-конфиг: policy, action, partial-query, unknowns.
-- Gateway формирует input для OPA: subject (user), action, resource (service, path, query, body).
-- OPA возвращает разрешение (`allow`) и, при partial, query для фильтрации данных.
+- Only successful responses with status 200 OK are cached, if the endpoint supports TTL.
+- The cache is stored in Redis, under the `gate_cache` namespace.
+- Caching is disabled for Swagger/OpenAPI and private endpoints.
 
-#### Пример input для OPA:
+---
+
+## Static file proxying
+
+For services with `static_host` configured, requests for static files are proxied directly.
+
+---
+
+## Audit
+
+Every proxied API request, whether served directly by a service or from cache, publishes a data access event through the SDK's `AuditEventPublisher`. This keeps a single audit trail of data access regardless of which service handled the request.
+
+---
+
+## Authorization and access control
+
+Salt.Box Gateway implements a centralized access control system based on OPA, Open Policy Agent, and permissions, supporting the ABAC, Attribute-Based Access Control, model.
+
+### Advantages of this approach
+
+- **ABAC:** Access is determined by attributes of the user, resource, action and service.
+- **Flexibility:** Policies are grouped by service, core and scheduler for example, by resource, tasks, jobs and collections for example, and by action, read, create and list for example.
+- **Scalability:** New services, resources, roles and conditions are easy to add.
+- **Partial Query:** OPA can return a filter to narrow down data at the request level.
+
+### 1. OPA, Open Policy Agent
+
+- An OPA config is set for every service endpoint: policy, action, partial-query, unknowns.
+- Gateway builds the OPA input from three parts: subject, the user, action and resource, which includes service, path, query and body.
+- OPA returns the `allow` decision and, for a partial query, a filter to narrow down data.
+
+#### Example OPA input:
 
 ```json
 {
@@ -142,7 +193,7 @@ Salt.Box Gateway реализует централизованную систе�
 }
 ```
 
-#### Пример политики (Rego):
+#### Example policy in Rego:
 
 ```rego
 package core.tasks.read
@@ -163,7 +214,7 @@ allow if utils.conditions.check_user_permissions(
 )
 ```
 
-#### Формат объекта пользователя
+#### User object format
 
 ```json
 "subject": {
@@ -177,13 +228,13 @@ allow if utils.conditions.check_user_permissions(
 }
 ```
 
-### 2. Пермишены
+### 2. Permissions
 
-- На текущий момент пермишены хранятся в файле `data.json`, который загружается в OPA.
-- В будущих релизах планируется хранение пермишенов в MongoDB, а также реализация полноценного интерфейса для управления пермишенами с фронта (создание, редактирование, удаление, просмотр).
-- Это позволит динамически изменять права доступа без перезапуска контейнеров.
+- Permissions are currently stored in a `data.json` file loaded into OPA.
+- Future releases plan to store permissions in MongoDB, along with a full frontend interface for managing them: creating, editing, deleting and viewing.
+- This will allow access rights to change dynamically without restarting containers.
 
-#### Пример пермишена
+#### Example permission
 
 ```json
 {
@@ -203,38 +254,37 @@ allow if utils.conditions.check_user_permissions(
 }
 ```
 
-**Структура пермишена:**
-- `is_active`: активен ли пермишен.
-- `service`: имя сервиса (например, core).
-- `resource`: тип ресурса (например, collections).
-- `action`: действие (например, read, create).
-- `object_conditions`: условия на объект (например, slug должен входить в список).
-- `subject_type`: тип субъекта (обычно "user").
-- `subject_conditions`: условия на пользователя (например, роль пользователя).
-- `created`, `modified`: даты создания и изменения.
+**Permission structure:**
+- `is_active`: whether the permission is active.
+- `service`: the service name, core for example.
+- `resource`: the resource type, collections for example.
+- `action`: the action, read or create for example.
+- `object_conditions`: conditions on the object, for example that slug must be in a list.
+- `subject_type`: the subject type, usually `user`.
+- `subject_conditions`: conditions on the user, for example their role.
+- `created`, `modified`: creation and modification dates.
 
-**Формат условий (conditions):**
-- Условия задаются в виде объектов с операторами (`$in`, `$eq`, `$lt`, и др.).
-- Можно комбинировать условия по разным полям, использовать вложенные `$and`/`$or`.
-- Пример: `"roles": { "$in": ["test_common"] }` — пользователь должен иметь одну из указанных ролей.
-- Пример: `"slug": { "$in": ["linux", "alt"] }` — объект должен иметь slug из списка.
-
-**Преимущества такого подхода:**
-- Гибкость: можно описывать сложные правила доступа без изменения кода.
-- Масштабируемость: легко добавлять новые условия и операторы.
-- Поддержка ABAC: условия могут учитывать любые атрибуты пользователя и объекта.
-- Централизованное управление: все права описываются в едином формате и месте.
+**Condition format:**
+- Conditions are objects with operators such as `$in`, `$eq`, `$lt` and others.
+- Conditions on different fields can be combined, including nested `$and`/`$or`.
+- The example `"roles": { "$in": ["test_common"] }` means the user must have one of the listed roles.
+- The example `"slug": { "$in": ["linux", "alt"] }` means the object's slug must be in the list.
 
 ### 3. Partial Query
 
-- Для некоторых эндпоинтов OPA возвращает partial query для фильтрации данных (например, список задач).
-- Gateway добавляет фильтр в query-параметры запроса к сервису.
+For listing and filtering endpoints, a task or collection list for example, OPA does not just return `allow`. It compiles a set of conditions under which the `allow` rule would hold for different values of data that is still unknown at the time.
+
+- An endpoint's config sets `is_partial: true`, a list of `unknowns`, that is, the parts of the data not yet known at evaluation time, `permissions` for example, and optionally `partial_query`, `allow == true` by default.
+- Gateway sends a `data.<policy>.<partial_query>` query to OPA's `/v1/compile` endpoint, together with the input data and the list of `unknowns`.
+- OPA returns a set of partial `queries`, each describing the condition under which access is granted for one combination of the unknown data.
+- Gateway compiles this set into a filter in one of two formats, set through `query_filter_format`: `mongo`, a MongoDB-style query object, or `sql`, part of a SQL WHERE clause.
+- If OPA returns no queries at all, access is denied. If one of the queries is empty, access is granted without restriction. Otherwise access is granted, but only to data matching the computed filter.
+- When a filter is computed, Gateway adds it as a JSON-encoded `opa_query` query parameter on the proxied request. The receiving service is responsible for applying that filter to its own data, merging it into its MongoDB query for example.
+- Each such check publishes a `permission_check` audit event recording the decision and whether a filter was applied.
 
 ---
 
-## Обновление политик OPA
+## Updating OPA policies
 
-- На данный момент политики OPA обновляются вручную: необходимо изменить Rego-файлы и перезапустить контейнер OPA для применения изменений.
-
-- В дальнейших релизах политики будут распространяться через OPA Bundles, храниться в Git.
-  При пуше в мастер будет запускаться CI, собираться свежий bundle и автоматически распространяться на все инстансы OPA.
+- Currently OPA policies are updated manually: the Rego files must be changed and the OPA container restarted for the changes to take effect.
+- In future releases policies will be distributed through OPA Bundles stored in Git. Pushing to main will trigger CI, build a fresh bundle and automatically distribute it to every OPA instance.
