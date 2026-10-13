@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+### Changed
+
+### Fixed
+
+## [0.4.0] - 2026-10-13
+
+### Added
+
 - User settings management (DAO, service and router) implemented in the Gateway.
 - Stream proxying support for API and static proxy responses, so large or
   streaming upstream responses are no longer fully buffered.
@@ -33,11 +41,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Added standalone frontend configuration support in discovery, including a dedicated endpoint to register standalone front entries.
+- Added standalone frontend configuration support in discovery, including a dedicated endpoint to register standalone
+  front entries.
 
 ### Changed
 
-- Updated discovery configuration assembly to include standalone frontend entries alongside enabled service front configurations.
+- Updated discovery configuration assembly to include standalone frontend entries alongside enabled service front
+  configurations.
 - Restricted unauthenticated access by removing task template routes from the auth whitelist.
 
 ### Fixed
@@ -69,7 +79,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Fix schema mixin classes to inherit from `BaseModel` explicitly for correct MRO with new SDK version (SBX-446)
 
-
 ## [0.2.0] - 2026-04-06
 
 ### Added
@@ -77,8 +86,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Forwarding TaskMinion events through WebSocket.
 - Initial implementation of new WebSocket layer.
 - New fields in job schemas:
-  - `ttl`
-  - `waiting_expires_at_dt`
+    - `ttl`
+    - `waiting_expires_at_dt`
 
 ### Changed
 
@@ -86,8 +95,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Removed job-related messages from task WebSocket.
 - Updated `saltbox-sdk` dependency version.
 - Improved ProxyService:
-  - updated URL construction
-  - added support for `Via` header handling.
+    - updated URL construction
+    - added support for `Via` header handling.
 - Updated health checker service availability logic.
 - CI pipeline updated to use new `ci-lib` jobs and stages.
 - Development setup improvements (`git safe.directory`).
@@ -123,27 +132,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add FastAPI metrics export endpoint to expose runtime metrics.
 - Add POST `/query-translator` endpoint and improve `AsyncOpaClient` to support query translation.
 - Add a WebSocket endpoint for broadcasting task updates.
-- Add `AsyncOpaClient`, `MongoQueryVisitor`, `SQLQueryVisitor` and Rego AST classes to support OPA policy checks and query generation.
-- Add service discovery and health-checking features: `DiscoveryService`, `discovery_router` (register/unregister/list), `HealthChecker`, balancing strategies and `ServiceDAO`.
+- Add `AsyncOpaClient`, `MongoQueryVisitor`, `SQLQueryVisitor` and Rego AST classes to support OPA policy checks and
+  query generation.
+- Add service discovery and health-checking features: `DiscoveryService`, `discovery_router` (register/unregister/list),
+  `HealthChecker`, balancing strategies and `ServiceDAO`.
 - Add `KeycloakOIDC` authentication utilities and `AuthMiddleware` with Redis caching for OIDC tokens.
 - Add secure WebSocket handling with token management and related error classes.
 - Add `get_custom_openapi_schema` to generate a customized OpenAPI schema for the FastAPI app.
 
 ### Changed
 
-- Replace ad-hoc HTTPX helper with a configurable `HttpxClientSingletoneFactory`; add granular HTTP client timeouts and an idempotent retry policy.
-- Refactor `ProxyService` request handling: initialize and parse `raw_body`/`body` safely, normalize headers, strip `content-type`/`content-length` for non-body methods, and rename `proxy_request` → `api_proxy` and `proxy_static` → `proxy_static_file`.
-- Improve query and cache handling: preserve multi-value query parameters, include serialized query params and user ID in cache keys, safely decode base64 cached responses, and filter hop-by-hop headers from cached responses.
-- Simplify access-control and OPA integration: set default OPA action when missing, improve permission-check flow, and refactor permissions paths handling.
-- Update configuration and settings: add `swagger_ui_oauth2_redirect_url`, `static_proxy_prefix`, include `scheduler` and `inventory` in `official_modules`, and set default `server_outer_socket` to `localhost` with additional HTTPX timeout settings.
-- Refactor error handling to use shared exception classes (migrate to `SaltBoxBaseError`/new API error classes) and extend `ApiProxyRequestError` to carry `status_code` and clearer detail extraction.
-- Refactor service instance handling: replace instance-add with merge semantics and improve healthy-instance selection and instance merging logic.
+- Replace ad-hoc HTTPX helper with a configurable `HttpxClientSingletoneFactory`; add granular HTTP client timeouts and
+  an idempotent retry policy.
+- Refactor `ProxyService` request handling: initialize and parse `raw_body`/`body` safely, normalize headers, strip
+  `content-type`/`content-length` for non-body methods, and rename `proxy_request` → `api_proxy` and `proxy_static` →
+  `proxy_static_file`.
+- Improve query and cache handling: preserve multi-value query parameters, include serialized query params and user ID
+  in cache keys, safely decode base64 cached responses, and filter hop-by-hop headers from cached responses.
+- Simplify access-control and OPA integration: set default OPA action when missing, improve permission-check flow, and
+  refactor permissions paths handling.
+- Update configuration and settings: add `swagger_ui_oauth2_redirect_url`, `static_proxy_prefix`, include `scheduler`
+  and `inventory` in `official_modules`, and set default `server_outer_socket` to `localhost` with additional HTTPX
+  timeout settings.
+- Refactor error handling to use shared exception classes (migrate to `SaltBoxBaseError`/new API error classes) and
+  extend `ApiProxyRequestError` to carry `status_code` and clearer detail extraction.
+- Refactor service instance handling: replace instance-add with merge semantics and improve healthy-instance selection
+  and instance merging logic.
 
 ### Fixed
 
 - Fix job WebSocket schema to match expected fields for task updates.
 - Fix static proxy error handling to return correct error responses when static upstreams fail.
-- Fix API proxy error handling and error detail extraction (log JSON parse errors and include status code when available).
+- Fix API proxy error handling and error detail extraction (log JSON parse errors and include status code when
+  available).
 - Fix user ID retrieval and related proxy request handling edge cases.
 - Address type checking and mypy issues discovered during refactors.
 
