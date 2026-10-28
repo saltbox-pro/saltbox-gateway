@@ -1,4 +1,4 @@
-#! /bin/sh
+#! /bin/bash
 
 set -e
 
@@ -16,25 +16,21 @@ KEYCLOAK_CLIENT_SECRET="$(cat "$KEYCLOAK_CLIENT_SECRET_FILE")"
 export REDIS_PASSWORD KEYCLOAK_CLIENT_SECRET
 
 if [ "$DEV_MODE" = 1 ]; then
-    # typing_extensions is installed via apt (no RECORD file), pip can't upgrade it in place
-    pip3 install --ignore-installed typing_extensions
-    pip3 install --editable .[reload]
-    pip3 install --editable "${SALTBOX_SDK_SRC_PATH}[mongo]"
+  uv --no-progress pip install --system --editable .
+  uv --no-progress pip install --system --editable "${SALTBOX_SDK_SRC_PATH}[mongo]"
 fi
 
 cmd_uvicorn() {
-  cmd='/usr/bin/uvicorn saltbox_gateway.main:app'
-  cmd="${cmd} --host=0.0.0.0 --port=${GATEWAY_HTTP_PORT:-8000}"
-  cmd="${cmd} --timeout-graceful-shutdown=${TIMEOUT_GRACEFUL_SHUTDOWN:-5}"
-  cmd="${cmd} --workers=${UVICORN_WORKERS:-1}"
+  cmd=(uvicorn saltbox_gateway.main:app --host=0.0.0.0 --port="${GATEWAY_HTTP_PORT:-8000}")
+  cmd+=(--timeout-graceful-shutdown="${TIMEOUT_GRACEFUL_SHUTDOWN}")
+  cmd+=(--workers="${UVICORN_WORKERS}")
   if [ "$DEV_MODE" = 1 ]; then
-    cmd="$cmd --reload"
+    cmd+=(--reload)
   fi
 }
 
 cmd_shell() {
-  shift
-  cmd="$*"
+  cmd=("${@:2}")
 }
 
 wrong_cmd() {
@@ -48,5 +44,5 @@ case $1 in
   *) wrong_cmd "$@" ;;
 esac
 
-echo "$ ${cmd}"
-exec $cmd
+echo "$ ${cmd[*]}"
+exec "${cmd[@]}"

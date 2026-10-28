@@ -1,10 +1,24 @@
 [project]
 name = "saltbox-gateway"
-description = ""
+description = "Salt.Box Gateway is a component of the Salt.Box platform that implements the API Gateway for its microservice architecture"
 readme = "README.md"
 requires-python = ">=3.12"
 license-files = ["LICENSE.txt"]
-dynamic = ["dependencies", "version"]
+dynamic = ["version"]
+dependencies = [
+  "fastapi~=0.115.4",
+  "httpx~=0.27.0",
+  "pydantic-settings~=2.9.1",
+  "pydantic~=2.11.3",
+  "redis~=5.2.0",
+  "uvicorn[standard]~=0.32.0",
+  "pyjwt[crypto]~=2.8.0",
+
+  # Dependencies from Salt.Box Team server.
+  # - Prefer tag or commit hash over branch to specify version.
+  # - Prefer long hash over short hash for pip efficiency.
+  "saltbox-sdk[mongo,redis,event-bus] @ git+https://dev.saltbox.pro/saltbox/saltbox-sdk/@9273c012bdc42dfd511c091c6c43cbefdb35d568",
+]
 
 [project.urls]
 Documentation = "https://saltbox.pro"
@@ -125,7 +139,6 @@ max-complexity = 10
 include = ["saltbox_gateway", "saltbox_gateway.*"]
 
 [tool.setuptools.dynamic]
-dependencies = { file = ["requirements.txt"] }
 version = { attr = "saltbox_gateway.__version__" }
 
 [tool.setuptools_scm]

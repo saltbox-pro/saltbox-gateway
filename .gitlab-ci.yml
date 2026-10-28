@@ -64,7 +64,8 @@ Build Gateway image:
   stage: build
   extends: .build-image
   variables:
-    TARGET: main
+    TARGET: prod
+    EXTRA_ARGS: "--build-arg='BASE_IMAGE=$BASE_IMAGE'"
 
 
 Trigger API Client build:
