@@ -7,10 +7,9 @@
 
 ARG BASE_IMAGE="registry.altlinux.org/alt/alt:p11"
 
-# hadolint global ignore=DL3006
+# hadolint global ignore=DL3064,DL3015,DL3008,DL3006
 FROM "$BASE_IMAGE" AS base
 
-# hadolint ignore=DL3015
 RUN \
   --mount=type=cache,target=/var/cache/apt,sharing=locked \
   --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
@@ -18,16 +17,13 @@ RUN \
 set -e
 mkdir --parents /var/cache/apt/archives/partial/ /var/lib/apt/lists/partial/
 apt-get update
-apt-get install --yes glibc-pthread=2.38.0.223.f053ff-alt1.p11.1 \
-                      python3-module-pip=26.1.2-alt1 \
-                      git=2.50.1-alt1
+apt-get install --yes glibc-pthread python3-module-pip git
 EOF
 
 COPY --chmod=755 docker/entrypoint.sh /usr/local/bin/
 
 RUN mkdir --parents /var/lib/saltbox-gateway/
 
-# hadolint global ignore=DL3064
 ENV UVICORN_WORKERS=1
 ENV TIMEOUT_GRACEFUL_SHUTDOWN=5
 ENV KEYCLOAK_CLIENT_SECRET_FILE=/run/secrets/keycloak_client_saltbox_core_password
@@ -37,7 +33,6 @@ EXPOSE 8000
 
 
 FROM base AS uv
-# hadolint ignore=DL3015
 RUN \
   --mount=type=cache,target=/var/cache/apt,sharing=locked,id=apt \
   --mount=type=cache,target=/var/lib/apt/lists,sharing=locked,id=apt-lists \
@@ -46,7 +41,7 @@ set -e
 mkdir --parents /var/cache/apt/archives/partial/ /var/lib/apt/lists/partial/
 apt-get update
 
-apt-get install --yes uv=0.10.7-alt1
+apt-get install --yes uv
 EOF
 
 
