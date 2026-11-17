@@ -108,10 +108,10 @@ async def task_websocket(
     secure_websocket = PubSubAuthenticatedWebSocket(websocket, rdb)
     await secure_websocket.handle_pubsub(
         handlers=[
-            PubSubMessageHandler(f'task:{task_id}:job-return:*:create', 'job-return', schema=JobReturnNotifySchema),
-            PubSubMessageHandler(f'task:{task_id}:job-return:*:update', 'job-return', schema=JobReturnNotifySchema),
-            PubSubMessageHandler(f'task:{task_id}:task-minion:*:create', 'task-minion', schema=TaskMinionModel),
-            PubSubMessageHandler(f'task:{task_id}:task-minion:*:update', 'task-minion', schema=TaskMinionModel),
+            PubSubMessageHandler(f'task-job-return:{task_id}:*:create', 'job-return', schema=JobReturnNotifySchema),
+            PubSubMessageHandler(f'task-job-return:{task_id}:*:update', 'job-return', schema=JobReturnNotifySchema),
+            PubSubMessageHandler(f'task-minion:{task_id}:*:create', 'task-minion', schema=TaskMinionModel),
+            PubSubMessageHandler(f'task-minion:{task_id}:*:update', 'task-minion', schema=TaskMinionModel),
             PubSubMessageHandler(f'task:{task_id}:update', 'task', schema=TaskModel),
         ]
     )
@@ -138,6 +138,6 @@ async def tasks_websocket_new(
     await secure_websocket.handle_pubsub(
         handlers=[
             PubSubMessageHandler(f'task:{secure_websocket.user.sub}:*:create', 'task', schema=TaskModel),
-            PubSubMessageHandler(f'task:{secure_websocket.user.sub}*:update', 'task', schema=TaskModel),
+            PubSubMessageHandler(f'task:{secure_websocket.user.sub}:*:update', 'task', schema=TaskModel),
         ]
     )
